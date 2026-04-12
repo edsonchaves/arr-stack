@@ -267,34 +267,7 @@ services:
       - homepage.widget.url=http://lidarr:8686
       - homepage.widget.key=${LIDARR_API_KEY}
 
-  readarr:
-    # Note: Readarr is still in development — uses the 'develop' tag
-    image: lscr.io/linuxserver/readarr:develop
-    container_name: readarr
-    restart: always
-    environment:
-      - PUID=${USER_ID}
-      - PGID=${GROUP_ID}
-      - TZ=${TIMEZONE}
-    volumes:
-      - ${CONFIG_ROOT}/readarr:/config
-      - ${DATA_ROOT}:/data
-    ports:
-      - "8787:8787"
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8787/ping"]
-      interval: 1m
-      retries: 10
-    labels:
-      - homepage.group=Media
-      - homepage.name=Readarr
-      - homepage.icon=readarr.png
-      - homepage.href=http://localhost:8787
-      - homepage.description=Books and audiobooks
-      - homepage.weight=5
-      - homepage.widget.type=readarr
-      - homepage.widget.url=http://readarr:8787
-      - homepage.widget.key=${READARR_API_KEY}
+  # readarr: project retired — https://readarr.com/ — use Calibre-Web for book management
 
   bazarr:
     image: lscr.io/linuxserver/bazarr:latest
@@ -544,32 +517,13 @@ services:
       - UN_RADARR_0_API_KEY=${RADARR_API_KEY}
       - UN_LIDARR_0_URL=http://lidarr:8686
       - UN_LIDARR_0_API_KEY=${LIDARR_API_KEY}
-      - UN_READARR_0_URL=http://readarr:8787
-      - UN_READARR_0_API_KEY=${READARR_API_KEY}
     volumes:
       - ${DATA_ROOT}/torrents:/data/torrents
     security_opt:
       - no-new-privileges:true
 
-  huntarr:
-    image: ghcr.io/plexguide/huntarr:latest
-    container_name: huntarr
-    restart: always
-    environment:
-      - PUID=${USER_ID}
-      - PGID=${GROUP_ID}
-      - TZ=${TIMEZONE}
-    volumes:
-      - ${CONFIG_ROOT}/huntarr:/config
-    ports:
-      - "9705:9705"
-    labels:
-      - homepage.group=Download
-      - homepage.name=Huntarr
-      - homepage.icon=huntarr.png
-      - homepage.href=http://localhost:9705
-      - homepage.description=Missing content hunter
-      - homepage.weight=3
+  # huntarr: DO NOT USE — removed Feb 2026, exposed all arr API keys/passwords with no auth
+  # Alternatives: Fetcharr, Newtarr, Seekarr — see README Future Plans section
 
   cleanuparr:
     image: ghcr.io/cleanuparr/cleanuparr:latest

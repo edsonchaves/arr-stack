@@ -76,7 +76,6 @@ All services run on the internal `nas` Docker network and communicate via contai
 | Container | Port | Purpose |
 |---|---|---|
 | unpackerr | — | Auto-extracts `.rar`/`.zip` archives after download |
-| huntarr | 9705 | Searches for missing episodes/movies and quality upgrades |
 | cleanuparr | 11011 | Removes stuck and stalled downloads from *arr queues |
 | jellystat | 8288 | Jellyfin watch history and statistics |
 | jellystat-db | — | PostgreSQL database backing Jellystat |
@@ -125,7 +124,6 @@ All services run on the internal `nas` Docker network and communicate via contai
     ├── uptime-kuma/
     ├── wg-easy/
     ├── homepage/
-    ├── huntarr/
     ├── cleanuparr/
     └── autobrr/
 
@@ -188,7 +186,7 @@ sudo chown -R $USER:$USER /mnt/data
 ### Step 2 — Create config directories
 
 ```bash
-mkdir -p ~/nas-server/config/{sonarr,radarr,lidarr,readarr,bazarr,jellyfin,jellyseerr,prowlarr,qbittorrent,calibre-web,komga,homepage,huntarr,cleanuparr,tdarr/{server,configs,logs},recyclarr,jellystat,jellystat-db,maintainerr,notifiarr,uptime-kuma,wg-easy,autobrr}
+mkdir -p ~/nas-server/config/{sonarr,radarr,lidarr,bazarr,jellyfin,jellyseerr,prowlarr,qbittorrent,calibre-web,komga,homepage,cleanuparr,tdarr/{server,configs,logs},recyclarr,jellystat,jellystat-db,maintainerr,notifiarr,uptime-kuma,wg-easy,autobrr}
 ```
 
 ### Step 3 — Fill in `.env`
@@ -242,13 +240,12 @@ Configure services in this order. Each service stores all settings in its `confi
 - Change the default password on first login
 - Create download categories: `tv-sonarr`, `radarr`, `lidarr-music`, `readarr-books`
 
-### 3. Sonarr/Radarr/Lidarr/Readarr
+### 3. Sonarr/Radarr/Lidarr
 For each app:
 - Settings → Media Management → Add root folder:
   - Sonarr: `/data/media/tv`
   - Radarr: `/data/media/movies`
   - Lidarr: `/data/media/music`
-  - Readarr: `/data/media/books`
 - Settings → Download Clients → Add qBittorrent: host = `vpn`, port = `8080`
 - Indexers are synced automatically from Prowlarr
 
@@ -354,3 +351,28 @@ When a domain is acquired, Nginx Proxy Manager or Traefik can be added to give e
 
 ### TrueNAS Scale
 The stack is designed to migrate to TrueNAS Scale by remapping `DATA_ROOT` in `.env` to the NAS mount point. All service configs remain unchanged.
+
+### Missing Content Search (Huntarr replacement)
+Huntarr was removed in February 2026 after the community discovered it exposed all *arr API keys and passwords to anyone on the local network or internet with no authentication required. The project and its GitHub/subreddit were deleted. **Do not use it.**
+
+The image pull failing with "denied" meant it never ran here — no API keys were exposed.
+
+Community replacements built with security in mind:
+
+| Option | Notes |
+|---|---|
+| **Fetcharr** | Built as a secure replacement, focused on safe API handling |
+| **Newtarr** | Sane fork of the same concept |
+| **Seekarr** | Search automation for Sonarr/Radarr |
+
+**In the meantime:** Sonarr/Radarr/Lidarr have built-in scheduled searches under Settings → General → Task Schedule. Enable "Search for missing" and "Search for cutoff unmet" — covers the same use case without a third-party tool.
+
+### Book Automation (Readarr replacement)
+Readarr (the *arr-style book manager) was retired in 2025. Candidates to replace it:
+
+| Option | Status | Notes |
+|---|---|---|
+| **LazyLibrarian** | Active | Monitors RSS feeds per author, integrates with qBittorrent + Prowlarr, sorts and renames. Docker image: `linuxserver/lazylibrarian` |
+| **BookBounty** | Early dev | Built as a direct Readarr successor. Watch: https://github.com/TheWicklowWolf/BookBounty |
+
+When adding, wire it up the same way as the other *arr apps: Prowlarr for indexers, qBittorrent (`host: vpn`, `port: 8080`) as download client, `/data/media/books` as root folder.
