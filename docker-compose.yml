@@ -1,0 +1,732 @@
+services:
+
+  # ============================================================
+  # INFRASTRUCTURE
+  # ============================================================
+
+  autoheal:
+    image: willfarrell/autoheal:latest
+    container_name: autoheal
+    restart: always
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=all
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  watchtower:
+    image: ghcr.io/nicholas-fedor/watchtower:latest
+    container_name: watchtower
+    restart: always
+    environment:
+      - WATCHTOWER_CLEANUP=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:latest
+    container_name: uptime-kuma
+    restart: always
+    ports:
+      - "3001:3001"
+    volumes:
+      - ${CONFIG_ROOT}/uptime-kuma:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:3001"]
+      interval: 1m
+      retries: 10
+    labels:
+      - homepage.group=System
+      - homepage.name=Uptime Kuma
+      - homepage.icon=uptime-kuma.png
+      - homepage.href=http://localhost:3001
+      - homepage.description=Service monitoring
+      - homepage.weight=0
+      - homepage.widget.type=uptimekuma
+      - homepage.widget.url=http://uptime-kuma:3001
+      - homepage.widget.slug=nas
+
+  wg-easy:
+    image: ghcr.io/wg-easy/wg-easy:latest
+    container_name: wg-easy
+    restart: always
+    environment:
+      - LANG=en
+      - WG_HOST=${SERVER_LAN_IP}
+      - PASSWORD_HASH=${WGEASY_PASSWORD_HASH}
+      - WG_DEFAULT_DNS=1.1.1.1,8.8.8.8
+      - UI_TRAFFIC_STATS=true
+      - TZ=${TIMEZONE}
+    ports:
+      - "51820:51820/udp"
+      - "51821:51821/tcp"
+    volumes:
+      - ${CONFIG_ROOT}/wg-easy:/etc/wireguard
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+    labels:
+      - homepage.group=System
+      - homepage.name=WG-Easy
+      - homepage.icon=wireguard.png
+      - homepage.href=http://localhost:51821
+      - homepage.description=Remote access VPN
+      - homepage.weight=1
+
+  # ============================================================
+  # VPN + DOWNLOAD
+  # ============================================================
+
+  vpn:
+    image: qmcgaw/gluetun:latest
+    container_name: vpn
+    restart: always
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    environment:
+      - VPN_SERVICE_PROVIDER=mullvad
+      - VPN_TYPE=wireguard
+      - WIREGUARD_PRIVATE_KEY=${MULLVAD_PRIVATE_KEY}
+      - WIREGUARD_ADDRESSES=${MULLVAD_ADDRESSES}
+      - SERVER_CITIES=${MULLVAD_CITY}
+      - TZ=${TIMEZONE}
+    # qBittorrent web UI port is exposed here since qbittorrent shares this container's network
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "/gluetun-entrypoint", "healthcheck"]
+      interval: 30s
+      timeout: 30s
+      retries: 10
+      start_period: 30s
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:libtorrentv1
+    container_name: qbittorrent
+    restart: always
+    # Routes all traffic through the VPN container
+    network_mode: "service:vpn"
+    environment:
+      - PUID=${USER_ID}
+      - PGID=${GROUP_ID}
+      - TZ=${TIMEZONE}
+      - WEBUI_PORT=8080
+      - DOCKER_MODS=ghcr.io/gabe565/linuxserver-mod-vuetorrent
+    volumes:
+      - ${CONFIG_ROOT}/qbittorrent:/config
+      - ${DATA_ROOT}/torrents:/data/torrents
+    depends_on:
+      vpn:
+        condition: service_healthy
+    healthcheck:
+      # Also checks internet connectivity — unhealthy if VPN is down
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8080", "https://google.com"]
+      interval: 1m
+      retries: 10
+    labels:
+      - homepage.group=Download
+      - homepage.name=qBittorrent
+      - homepage.icon=qbittorrent.png
+      - homepage.href=http://localhost:8080
+      - homepage.description=Torrent client (Mullvad VPN)
+      - homepage.weight=0
+      - homepage.widget.type=qbittorrent
+      - homepage.widget.url=http://vpn:8080
+      - homepage.widget.username=${QBITTORRENT_USERNAME}
+      - homepage.widget.password=${QBITTORRENT_PASSWORD}
+
+  # ============================================================
+  # MEDIA MANAGEMENT (*arr)
+  # ============================================================
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    restart: always
+    environment:
+      - PUID=${USER_ID}
+      - PGID=${GROUP_ID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${CONFIG_ROOT}/prowlarr:/config
+    ports:
+      - "9696:9696"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:9696/ping"]
+      interval: 1m
+      retries: 10
+    labels:
+      - homepage.group=Download
+      - homepage.name=Prowlarr
+      - homepage.icon=prowlarr.png
+      - homepage.href=http://localhost:9696
+      - homepage.description=Indexer manager
+      - homepage.weight=1
+      - homepage.widget.type=prowlarr
+      - homepage.widget.url=http://prowlarr:9696
+      - homepage.widget.key=${PROWLARR_API_KEY}
+
+  flaresolverr:
+    # Bypasses Cloudflare protection on indexers that require it
+    # Add to Prowlarr: Settings → Indexers → Add FlareSolverr → URL: http://flaresolverr:8191
+    image: 21hsmw/flaresolverr:nodriver
+    container_name: flaresolverr
+    restart: always
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_HTML=${LOG_HTML:-false}
+      - CAPTCHA_SOLVER=${CAPTCHA_SOLVER:-none}
+      - TZ=${TIMEZONE}
+    # Internal only — no port exposure needed
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    restart: always
+    environment:
+      - PUID=${USER_ID}
+      - PGID=${GROUP_ID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${CONFIG_ROOT}/sonarr:/config
+      - ${DATA_ROOT}:/data
+    ports:
+      - "8989:8989"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8989/ping"]
+      interval: 1m
+      retries: 10
+    labels:
+      - homepage.group=Media
+      - homepage.name=Sonarr
+      - homepage.icon=sonarr.png
+      - homepage.href=http://localhost:8989
+      - homepage.description=TV series
+      - homepage.weight=0
+      - homepage.widget.type=sonarr
+      - homepage.widget.url=http://sonarr:8989
+      - homepage.widget.key=${SONARR_API_KEY}
+
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    restart: always
+    environment:
+      - PUID=${USER_ID}
+      - PGID=${GROUP_ID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${CONFIG_ROOT}/radarr:/config
+      - ${DATA_ROOT}:/data
+    ports:
+      - "7878:7878"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:7878/ping"]
+      interval: 1m
+      retries: 10
+    labels:
+      - homepage.group=Media
+      - homepage.name=Radarr
+      - homepage.icon=radarr.png
+      - homepage.href=http://localhost:7878
+      - homepage.description=Movies
+      - homepage.weight=1
+      - homepage.widget.type=radarr
+      - homepage.widget.url=http://radarr:7878
+      - homepage.widget.key=${RADARR_API_KEY}
+
+  lidarr:
+    image: lscr.io/linuxserver/lidarr:latest
+    container_name: lidarr
+    restart: always
+    environment:
+      - PUID=${USER_ID}
+      - PGID=${GROUP_ID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${CONFIG_ROOT}/lidarr:/config
+      - ${DATA_ROOT}:/data
+    ports:
+      - "8686:8686"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8686/ping"]
+      interval: 1m
+      retries: 10
+    labels:
+      - homepage.group=Media
+      - homepage.name=Lidarr
+      - homepage.icon=lidarr.png
+      - homepage.href=http://localhost:8686
+      - homepage.description=Music
+      - homepage.weight=2
+      - homepage.widget.type=lidarr
+      - homepage.widget.url=http://lidarr:8686
+      - homepage.widget.key=${LIDARR_API_KEY}
+
+  readarr:
+    # Note: Readarr is still in development — uses the 'develop' tag
+    image: lscr.io/linuxserver/readarr:develop
+    container_name: readarr
+    restart: always
+    environment:
+      - PUID=${USER_ID}
+      - PGID=${GROUP_ID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${CONFIG_ROOT}/readarr:/config
+      - ${DATA_ROOT}:/data
+    ports:
+      - "8787:8787"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8787/ping"]
+      interval: 1m
+      retries: 10
+    labels:
+      - homepage.group=Media
+      - homepage.name=Readarr
+      - homepage.icon=readarr.png
+      - homepage.href=http://localhost:8787
+      - homepage.description=Books and audiobooks
+      - homepage.weight=5
+      - homepage.widget.type=readarr
+      - homepage.widget.url=http://readarr:8787
+      - homepage.widget.key=${READARR_API_KEY}
+
+  bazarr:
+    image: lscr.io/linuxserver/bazarr:latest
+    container_name: bazarr
+    restart: always
+    environment:
+      - PUID=${USER_ID}
+      - PGID=${GROUP_ID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${CONFIG_ROOT}/bazarr:/config
+      - ${DATA_ROOT}:/data
+    ports:
+      - "6767:6767"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:6767/api/v1/status"]
+      interval: 1m
+      retries: 10
+    labels:
+      - homepage.group=Download
+      - homepage.name=Bazarr
+      - homepage.icon=bazarr.png
+      - homepage.href=http://localhost:6767
+      - homepage.description=Subtitles (PT-BR)
+      - homepage.weight=2
+      - homepage.widget.type=bazarr
+      - homepage.widget.url=http://bazarr:6767
+      - homepage.widget.key=${BAZARR_API_KEY}
+
+  jellyseerr:
+    image: ghcr.io/seerr-team/seerr:latest
+    init: true
+    container_name: jellyseerr
+    restart: always
+    environment:
+      - LOG_LEVEL=info
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${CONFIG_ROOT}/jellyseerr:/app/config
+    ports:
+      - "5055:5055"
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:5055/api/v1/status || exit 1
+      start_period: 20s
+      timeout: 3s
+      interval: 1m
+      retries: 10
+    labels:
+      - homepage.group=Media
+      - homepage.name=Jellyseerr
+      - homepage.icon=jellyseerr.png
+      - homepage.href=http://localhost:5055
+      - homepage.description=Request movies and TV
+      - homepage.weight=3
+      - homepage.widget.type=jellyseerr
+      - homepage.widget.url=http://jellyseerr:5055
+      - homepage.widget.key=${JELLYSEERR_API_KEY}
+
+  recyclarr:
+    # Syncs TRaSH Guide quality profiles to Sonarr and Radarr automatically
+    # Configure sync targets in config/recyclarr/recyclarr.yml
+    # Runs on the schedule defined in recyclarr.yml (schedules section)
+    image: ghcr.io/recyclarr/recyclarr:latest
+    container_name: recyclarr
+    restart: unless-stopped
+    user: ${USER_ID}:${GROUP_ID}
+    environment:
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${CONFIG_ROOT}/recyclarr:/config
+
+  # ============================================================
+  # MEDIA SERVERS
+  # ============================================================
+
+  jellyfin:
+    image: lscr.io/linuxserver/jellyfin:latest
+    container_name: jellyfin
+    restart: always
+    # Nvidia GPU passthrough for hardware transcoding
+    # Requires: nvidia-container-toolkit installed on host
+    # Host setup: nvidia-ctk runtime configure --runtime=docker && systemctl restart docker
+    runtime: nvidia
+    environment:
+      - PUID=${USER_ID}
+      - PGID=${GROUP_ID}
+      - TZ=${TIMEZONE}
+      - JELLYFIN_PublishedServerUrl=http://${SERVER_LAN_IP}:8096
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    volumes:
+      - ${CONFIG_ROOT}/jellyfin:/config
+      - ${DATA_ROOT}:/data
+    ports:
+      - "8096:8096"
+      - "7359:7359/udp"   # Local network discovery
+      - "1900:1900/udp"   # DLNA
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8096/health"]
+      interval: 1m
+      retries: 10
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    labels:
+      - homepage.group=Media
+      - homepage.name=Jellyfin
+      - homepage.icon=jellyfin.png
+      - homepage.href=http://localhost:8096
+      - homepage.description=Media server
+      - homepage.weight=0
+      - homepage.widget.type=jellyfin
+      - homepage.widget.url=http://jellyfin:8096
+      - homepage.widget.key=${JELLYFIN_API_KEY}
+
+  calibre-web:
+    image: lscr.io/linuxserver/calibre-web:latest
+    container_name: calibre-web
+    restart: unless-stopped
+    environment:
+      - PUID=${USER_ID}
+      - PGID=${GROUP_ID}
+      - TZ=${TIMEZONE}
+      - DOCKER_MODS=linuxserver/mods:universal-calibre
+      - OAUTHLIB_RELAX_TOKEN_SCOPE=1
+    volumes:
+      - ${CONFIG_ROOT}/calibre-web:/config
+      - ${DATA_ROOT}/media/books:/books
+    ports:
+      - "8083:8083"
+    labels:
+      - homepage.group=Media
+      - homepage.name=Calibre-Web
+      - homepage.icon=calibre-web.png
+      - homepage.href=http://localhost:8083
+      - homepage.description=Books
+      - homepage.weight=6
+      - homepage.widget.type=calibreweb
+      - homepage.widget.url=http://calibre-web:8083
+      - homepage.widget.username=${CALIBRE_USERNAME}
+      - homepage.widget.password=${CALIBRE_PASSWORD}
+
+  komga:
+    image: gotson/komga:latest
+    container_name: komga
+    restart: unless-stopped
+    user: ${USER_ID}:${GROUP_ID}
+    environment:
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${CONFIG_ROOT}/komga:/config
+      - ${DATA_ROOT}/media/comics:/data/comics
+    ports:
+      - "25600:25600"
+    labels:
+      - homepage.group=Media
+      - homepage.name=Komga
+      - homepage.icon=komga.png
+      - homepage.href=http://localhost:25600
+      - homepage.description=Comics and manga
+      - homepage.weight=7
+
+  # ============================================================
+  # TRANSCODING
+  # ============================================================
+
+  tdarr-server:
+    image: ghcr.io/haveagitgat/tdarr:latest
+    container_name: tdarr-server
+    restart: always
+    environment:
+      - TZ=${TIMEZONE}
+      - PUID=${USER_ID}
+      - PGID=${GROUP_ID}
+      - serverIP=0.0.0.0
+      - serverPort=8266
+      - webUIPort=8265
+      - internalNode=false
+      - inContainer=true
+    volumes:
+      - ${CONFIG_ROOT}/tdarr/server:/app/server
+      - ${CONFIG_ROOT}/tdarr/configs:/app/configs
+      - ${CONFIG_ROOT}/tdarr/logs:/app/logs
+      - ${DATA_ROOT}/media:/media
+      - /tmp/tdarr_transcode_cache:/temp
+    ports:
+      - "8265:8265"
+      - "8266:8266"
+    labels:
+      - homepage.group=Download
+      - homepage.name=Tdarr
+      - homepage.icon=tdarr.png
+      - homepage.href=http://localhost:8265
+      - homepage.description=Media transcoding (H.265)
+      - homepage.weight=5
+
+  tdarr-node:
+    image: ghcr.io/haveagitgat/tdarr_node:latest
+    container_name: tdarr-node
+    restart: always
+    # Nvidia GPU for H.265 hardware encoding
+    runtime: nvidia
+    environment:
+      - TZ=${TIMEZONE}
+      - PUID=${USER_ID}
+      - PGID=${GROUP_ID}
+      - nodeName=MainNode
+      - serverIP=tdarr-server
+      - serverPort=8266
+      - inContainer=true
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    volumes:
+      - ${CONFIG_ROOT}/tdarr/configs:/app/configs
+      - ${CONFIG_ROOT}/tdarr/logs:/app/logs
+      - ${DATA_ROOT}/media:/media
+      - /tmp/tdarr_transcode_cache:/temp
+    depends_on:
+      - tdarr-server
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # ============================================================
+  # AUTOMATION & MONITORING
+  # ============================================================
+
+  unpackerr:
+    # Automatically extracts compressed downloads (.rar, .zip) after *arr apps finish
+    image: ghcr.io/unpackerr/unpackerr:latest
+    container_name: unpackerr
+    restart: always
+    user: ${USER_ID}:${GROUP_ID}
+    environment:
+      - TZ=${TIMEZONE}
+      - UN_SONARR_0_URL=http://sonarr:8989
+      - UN_SONARR_0_API_KEY=${SONARR_API_KEY}
+      - UN_RADARR_0_URL=http://radarr:7878
+      - UN_RADARR_0_API_KEY=${RADARR_API_KEY}
+      - UN_LIDARR_0_URL=http://lidarr:8686
+      - UN_LIDARR_0_API_KEY=${LIDARR_API_KEY}
+      - UN_READARR_0_URL=http://readarr:8787
+      - UN_READARR_0_API_KEY=${READARR_API_KEY}
+    volumes:
+      - ${DATA_ROOT}/torrents:/data/torrents
+    security_opt:
+      - no-new-privileges:true
+
+  huntarr:
+    image: ghcr.io/plexguide/huntarr:latest
+    container_name: huntarr
+    restart: always
+    environment:
+      - PUID=${USER_ID}
+      - PGID=${GROUP_ID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${CONFIG_ROOT}/huntarr:/config
+    ports:
+      - "9705:9705"
+    labels:
+      - homepage.group=Download
+      - homepage.name=Huntarr
+      - homepage.icon=huntarr.png
+      - homepage.href=http://localhost:9705
+      - homepage.description=Missing content hunter
+      - homepage.weight=3
+
+  cleanuparr:
+    image: ghcr.io/cleanuparr/cleanuparr:latest
+    container_name: cleanuparr
+    restart: always
+    environment:
+      - TZ=${TIMEZONE}
+      - PUID=${USER_ID}
+      - PGID=${GROUP_ID}
+    volumes:
+      - ${CONFIG_ROOT}/cleanuparr:/config
+      - ${CONFIG_ROOT}/cleanuparr/logs:/var/logs
+    ports:
+      - "11011:11011"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11011/health"]
+      interval: 1m
+      timeout: 10s
+      start_period: 30s
+      retries: 10
+    labels:
+      - homepage.group=Download
+      - homepage.name=Cleanuparr
+      - homepage.icon=cleanuperr.png
+      - homepage.href=http://localhost:11011
+      - homepage.description=Stalled download cleanup
+      - homepage.weight=4
+
+  jellystat-db:
+    image: postgres:15-alpine
+    container_name: jellystat-db
+    restart: always
+    environment:
+      - POSTGRES_DB=jellystat
+      - POSTGRES_USER=jellystat
+      - POSTGRES_PASSWORD=${JELLYSTAT_DB_PASSWORD}
+    volumes:
+      - ${CONFIG_ROOT}/jellystat-db:/var/lib/postgresql/data
+
+  jellystat:
+    image: cyfershepard/jellystat:latest
+    container_name: jellystat
+    restart: always
+    environment:
+      - POSTGRES_USER=jellystat
+      - POSTGRES_PASSWORD=${JELLYSTAT_DB_PASSWORD}
+      - POSTGRES_IP=jellystat-db
+      - POSTGRES_PORT=5432
+      - JWT_SECRET=${JELLYSTAT_JWT_SECRET}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${CONFIG_ROOT}/jellystat:/app/backend/backup-data
+    ports:
+      - "8288:3000"
+    depends_on:
+      - jellystat-db
+    labels:
+      - homepage.group=System
+      - homepage.name=Jellystat
+      - homepage.icon=jellystat.png
+      - homepage.href=http://localhost:8288
+      - homepage.description=Jellyfin watch statistics
+      - homepage.weight=2
+
+  maintainerr:
+    image: ghcr.io/jorenn92/maintainerr:latest
+    container_name: maintainerr
+    restart: unless-stopped
+    user: ${USER_ID}:${GROUP_ID}
+    environment:
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${CONFIG_ROOT}/maintainerr:/opt/data
+    ports:
+      - "6246:6246"
+    labels:
+      - homepage.group=System
+      - homepage.name=Maintainerr
+      - homepage.icon=maintainerr.png
+      - homepage.href=http://localhost:6246
+      - homepage.description=Auto-delete watched media
+      - homepage.weight=3
+
+  notifiarr:
+    image: golift/notifiarr:latest
+    container_name: notifiarr
+    restart: always
+    environment:
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${CONFIG_ROOT}/notifiarr:/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /etc/machine-id:/etc/machine-id:ro
+    ports:
+      - "5454:5454"
+    labels:
+      - homepage.group=System
+      - homepage.name=Notifiarr
+      - homepage.icon=notifiarr.png
+      - homepage.href=http://localhost:5454
+      - homepage.description=Notifications hub
+      - homepage.weight=4
+
+  # ============================================================
+  # DASHBOARD
+  # ============================================================
+
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    restart: always
+    environment:
+      - HOMEPAGE_VAR_TITLE=${HOMEPAGE_VAR_TITLE}
+      - HOMEPAGE_VAR_SEARCH_PROVIDER=${HOMEPAGE_VAR_SEARCH_PROVIDER}
+      - HOMEPAGE_VAR_HEADER_STYLE=${HOMEPAGE_VAR_HEADER_STYLE:-clean}
+      - HOMEPAGE_VAR_WEATHER_CITY=${HOMEPAGE_VAR_WEATHER_CITY}
+      - HOMEPAGE_VAR_WEATHER_LAT=${HOMEPAGE_VAR_WEATHER_LAT}
+      - HOMEPAGE_VAR_WEATHER_LONG=${HOMEPAGE_VAR_WEATHER_LONG}
+      - HOMEPAGE_VAR_WEATHER_TIME=${TIMEZONE}
+      - HOMEPAGE_VAR_WEATHER_UNIT=${HOMEPAGE_VAR_WEATHER_UNIT}
+    volumes:
+      - ${CONFIG_ROOT}/homepage:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${DATA_ROOT}:/data
+    ports:
+      - "3000:3000"
+    command: [sh, -c, "cp -n /app/config/tpl/*.yaml /app/config && node server.js"]
+
+  # ============================================================
+  # OPTIONAL — PRIVATE TRACKERS
+  # To enable: docker compose --profile private-trackers up -d autobrr
+  # ============================================================
+
+  autobrr:
+    image: ghcr.io/autobrr/autobrr:latest
+    container_name: autobrr
+    restart: always
+    environment:
+      - TZ=${TIMEZONE}
+    user: ${USER_ID}:${GROUP_ID}
+    volumes:
+      - ${CONFIG_ROOT}/autobrr:/config
+    ports:
+      - "7474:7474"
+    labels:
+      - homepage.group=Download
+      - homepage.name=Autobrr
+      - homepage.icon=autobrr.png
+      - homepage.href=http://localhost:7474
+      - homepage.description=Private tracker automation
+      - homepage.weight=9
+      - homepage.widget.type=autobrr
+      - homepage.widget.url=http://autobrr:7474
+      - homepage.widget.key=${AUTOBRR_API_KEY}
+    profiles:
+      - private-trackers
+
+networks:
+  default:
+    name: nas

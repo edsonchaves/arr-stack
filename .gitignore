@@ -1,0 +1,31 @@
+# ============================================================
+# SECRETS — never commit these
+# ============================================================
+
+# Environment file — contains VPN keys, passwords, API keys
+.env
+
+# Mullvad WireGuard configs — contain your VPN private key
+mullvad_wireguard/
+
+# ============================================================
+# SERVICE DATA — runtime state, not config-as-code
+# ============================================================
+
+# All service config directories (databases, caches, logs)
+# These are generated at runtime and may contain secrets
+config/
+
+# Tdarr transcode cache
+/tmp/tdarr_transcode_cache/
+
+# ============================================================
+# OS / EDITOR JUNK
+# ============================================================
+
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
