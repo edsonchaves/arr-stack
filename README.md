@@ -7,7 +7,7 @@ A self-hosted home media server stack running on Docker Compose. Covers the full
 ## Architecture Overview
 
 ```
-You → Jellyseerr (request) → Sonarr/Radarr/Lidarr/Readarr (manage)
+You → Jellyseerr (request) → Sonarr/Radarr/Lidarr (manage)
                                         ↓
                               Prowlarr (find on indexers)
                                         ↓
@@ -51,7 +51,6 @@ All services run on the internal `nas` Docker network and communicate via contai
 | sonarr | 8989 | Monitors and downloads TV series |
 | radarr | 7878 | Monitors and downloads movies |
 | lidarr | 8686 | Monitors and downloads music |
-| readarr | 8787 | Monitors and downloads books and audiobooks |
 | bazarr | 6767 | Automatically downloads subtitles (Brazilian Portuguese) |
 | jellyseerr | 5055 | Netflix-style UI to browse and request content |
 | recyclarr | — | Syncs TRaSH Guide quality profiles to Sonarr/Radarr daily |
@@ -80,13 +79,12 @@ All services run on the internal `nas` Docker network and communicate via contai
 | jellystat | 8288 | Jellyfin watch history and statistics |
 | jellystat-db | — | PostgreSQL database backing Jellystat |
 | maintainerr | 6246 | Rule-based media cleanup (e.g. delete watched movies after 30 days) |
-| notifiarr | 5454 | Sends notifications to Discord/Telegram for *arr events |
 
 ### Dashboard
 
 | Container | Port | Purpose |
 |---|---|---|
-| homepage | 3000 | Unified dashboard with live widgets for all services |
+| homepage | 3090 | Unified dashboard with live widgets for all services |
 
 ### Optional (Docker Profile)
 
@@ -106,7 +104,6 @@ All services run on the internal `nas` Docker network and communicate via contai
     ├── sonarr/
     ├── radarr/
     ├── lidarr/
-    ├── readarr/
     ├── bazarr/
     ├── jellyfin/
     ├── jellyseerr/
@@ -120,7 +117,6 @@ All services run on the internal `nas` Docker network and communicate via contai
     ├── jellystat/
     ├── jellystat-db/
     ├── maintainerr/
-    ├── notifiarr/
     ├── uptime-kuma/
     ├── wg-easy/
     ├── homepage/
@@ -142,6 +138,79 @@ All services run on the internal `nas` Docker network and communicate via contai
 ```
 
 > All service configurations are bind-mounted from `config/`. Settings you configure via the web UI (quality profiles, indexers, download clients, etc.) are persisted there automatically and survive container restarts and image upgrades.
+
+---
+
+## WSL2 Networking (Windows only)
+
+When running on WSL2, services are not directly reachable from other devices on your LAN (TV, phone, etc.) because WSL2 runs in an isolated VM. You need to set up a **port proxy** on Windows to forward traffic into WSL2.
+
+### Expose Jellyfin to your LAN
+
+Run in **PowerShell as Administrator** (replace `<WSL2_IP>` with the output of `wsl hostname -I`):
+
+```powershell
+# Get your WSL2 IP
+wsl hostname -I
+
+# Forward Jellyfin port from Windows to WSL2
+netsh interface portproxy add v4tov4 listenport=8096 listenaddress=0.0.0.0 connectport=8096 connectaddress=<WSL2_IP>
+
+# Allow through Windows Firewall
+netsh advfirewall firewall add rule name="Jellyfin" dir=in action=allow protocol=TCP localport=8096
+```
+
+Then connect using your **Windows LAN IP** (from `ipconfig` — look for Wi-Fi or Ethernet IPv4 address):
+```
+http://192.168.x.x:8096
+```
+
+### Notes
+
+- **WSL2 IP changes on reboot** — you'll need to redo the portproxy after each restart, or automate it with a startup script
+- **NordVPN / other VPNs on Windows** can interfere — disable them temporarily if the connection fails
+- To repeat for other services (e.g. Homepage on 3090, qBittorrent on 8080), add a portproxy rule for each port
+- Verify existing portproxy rules: `netsh interface portproxy show all`
+- Remove a rule: `netsh interface portproxy delete v4tov4 listenport=8096 listenaddress=0.0.0.0`
+
+### Nvidia GPU transcoding on WSL2 (libnvcuvid fix)
+
+On WSL2, the NVIDIA video codec libraries (`libnvcuvid.so.1`) are not automatically passed into Docker containers even when the GPU is otherwise visible (`nvidia-smi` works). This causes Jellyfin's FFmpeg to fail with:
+
+```
+Cannot load libnvcuvid.so.1
+Failed loading nvcuvid.
+Failed setup for format cuda: hwaccel initialisation returned error.
+```
+
+**Fix — already applied in `docker-compose.yml`:**
+
+The Jellyfin service mounts the WSL2 NVIDIA library path and exposes it to FFmpeg:
+
+```yaml
+environment:
+  - LD_LIBRARY_PATH=/usr/lib/wsl/lib
+volumes:
+  - /usr/lib/wsl/lib:/usr/lib/wsl/lib:ro
+```
+
+This makes `libnvcuvid.so.1` accessible inside the container and enables NVENC/NVDEC hardware transcoding. Without this, Jellyfin falls back to software transcoding (or fails entirely).
+
+To verify it's working after a fresh deploy:
+```bash
+docker compose exec jellyfin find /usr/lib/wsl/lib -name "libnvcuvid*"
+# Should return: /usr/lib/wsl/lib/libnvcuvid.so.1
+```
+
+### Jellyfin library monitoring on WSL2
+
+Jellyfin uses inotify to watch for new files. On WSL2, inotify events from Docker bind-mounted volumes can occasionally be missed, meaning new downloads won't appear in Jellyfin automatically.
+
+**Workaround — increase scan frequency:**
+
+**Jellyfin → Dashboard → Scheduled Tasks → Scan Media Library** → set interval to **15–30 minutes**.
+
+This ensures new content appears within 30 minutes even if real-time monitoring misses an event. Real-time monitoring should still be enabled (`Dashboard → Libraries → Edit → Enable real time monitoring`) as it works most of the time.
 
 ---
 
@@ -186,16 +255,23 @@ sudo chown -R $USER:$USER /mnt/data
 ### Step 2 — Create config directories
 
 ```bash
-mkdir -p ~/nas-server/config/{sonarr,radarr,lidarr,bazarr,jellyfin,jellyseerr,prowlarr,qbittorrent,calibre-web,komga,homepage,cleanuparr,tdarr/{server,configs,logs},recyclarr,jellystat,jellystat-db,maintainerr,notifiarr,uptime-kuma,wg-easy,autobrr}
+mkdir -p ~/nas-server/config/{sonarr,radarr,lidarr,bazarr,jellyfin,jellyseerr,prowlarr,qbittorrent,calibre-web,komga,homepage,cleanuparr,tdarr/{server,configs,logs},recyclarr,jellystat,jellystat-db,maintainerr,uptime-kuma,wg-easy,autobrr}
 ```
 
-### Step 3 — Fill in `.env`
+### Step 3 — Create and fill in `.env`
 
-Open [`.env`](.env) and fill in:
+Copy the template and fill in your values:
+
+```bash
+cp .env.template .env
+```
+
+Open [`.env.template`](.env.template) as a reference. Variables to fill in:
 
 | Variable | Where to get it |
 |---|---|
 | `USER_ID` / `GROUP_ID` | Run: `id -u` and `id -g` |
+| `CONFIG_ROOT` | Absolute path to this repo's `config/` directory |
 | `MULLVAD_PRIVATE_KEY` | mullvad.net → Account → WireGuard keys → Generate key |
 | `MULLVAD_ADDRESSES` | Same page, the IP address assigned to the key |
 | `MULLVAD_CITY` | e.g. `Frankfurt`, `Amsterdam`, `Stockholm` |
@@ -227,69 +303,86 @@ docker compose exec qbittorrent curl ifconfig.me
 
 ---
 
+## Background Service Configuration
+
+These services have no web UI. Configure them via files before or after starting the stack.
+
+### [Recyclarr](docs/recyclarr.md) — config file only
+Create `config/recyclarr/secrets.yml` with your Sonarr and Radarr API keys. Syncs TRaSH Guide quality profiles automatically on a schedule.
+
+### [Unpackerr](docs/unpackerr.md) — configured via `.env`
+No extra steps needed — it reads `SONARR_API_KEY`, `RADARR_API_KEY`, and `LIDARR_API_KEY` directly from `.env`. Will auto-extract archives once the keys are filled in.
+
+### [Autoheal](docs/autoheal.md) — zero config
+Monitors all containers with a healthcheck and restarts unhealthy ones automatically. Nothing to configure.
+
+### [Watchtower](docs/watchtower.md) — zero config
+Checks for updated container images every 24 hours and applies them automatically. Nothing to configure.
+
+---
+
 ## Post-Install UI Configuration
 
-Configure services in this order. Each service stores all settings in its `config/` directory — you only do this once.
+Configure services in this order. Each service stores all settings in its `config/` directory — you only do this once. Click any step for the full setup instructions.
 
-### 1. Prowlarr — `http://localhost:9696`
-- Settings → Indexers → Add FlareSolverr proxy: URL = `http://flaresolverr:8191`
-- Indexers → Add your torrent indexers (1337x, YTS, etc.)
-- Settings → Apps → Add Sonarr, Radarr, Lidarr, Readarr (they will auto-sync indexers)
+### 1. [Prowlarr](docs/prowlarr.md) — `http://localhost:9696`
+Add the FlareSolverr proxy and your indexers.
 
-### 2. qBittorrent — `http://localhost:8080`
-- Change the default password on first login
-- Create download categories: `tv-sonarr`, `radarr`, `lidarr-music`, `readarr-books`
+### 2. [qBittorrent](docs/qbittorrent.md) — `http://localhost:8080`
+Set credentials, download paths, categories, and seeding limits.
 
-### 3. Sonarr/Radarr/Lidarr
-For each app:
-- Settings → Media Management → Add root folder:
-  - Sonarr: `/data/media/tv`
-  - Radarr: `/data/media/movies`
-  - Lidarr: `/data/media/music`
-- Settings → Download Clients → Add qBittorrent: host = `vpn`, port = `8080`
-- Indexers are synced automatically from Prowlarr
+### 3. [Sonarr / Radarr / Lidarr](docs/arr-apps.md)
+Configure authentication, root folders, and qBittorrent as the download client.
 
-### 4. Fill in API keys
-In each app: Settings → General → copy the API Key.
-Paste into `.env`, then restart containers that use them:
+### 4. [Connect Prowlarr to *arr apps](docs/prowlarr.md#4-connect-prowlarr-to-arr-apps)
+Full Sync so all indexers push to Sonarr, Radarr, and Lidarr automatically.
+
+### 5. [Bazarr](docs/bazarr.md) — `http://localhost:6767`
+Set up Brazilian Portuguese subtitles and connect to Sonarr and Radarr.
+
+### 6. [Jellyfin](docs/jellyfin.md) — `http://localhost:8096`
+Run the setup wizard, add media libraries, and enable Nvidia hardware transcoding.
+
+### 7. [Jellyseerr](docs/jellyseerr.md) — `http://localhost:5055`
+Connect to Jellyfin, sync libraries, and link Sonarr and Radarr.
+
+Once all keys are in `.env`, apply them:
 
 ```bash
 docker compose up -d
 ```
 
-### 5. Bazarr — `http://localhost:6767`
-- Settings → Sonarr → URL: `http://sonarr:8989`, API key from `.env`
-- Settings → Radarr → URL: `http://radarr:7878`, API key from `.env`
-- Settings → Languages → Add Brazilian Portuguese
-- Settings → Providers → Add OpenSubtitles or another provider
+> This restarts Homepage and Unpackerr with the new keys — Homepage will show live stats widgets, and Unpackerr will auto-extract completed downloads.
 
-### 6. Jellyfin — `http://localhost:8096`
-- Create admin account on first launch
-- Add libraries: `/data/media/movies`, `/data/media/tv`, `/data/media/music`
-- Admin Dashboard → Playback → Enable NVENC hardware transcoding
+### 8. [Tdarr](docs/tdarr.md) — `http://localhost:8265`
+Add the media library, build the Nvidia H.265 plugin stack, and configure transcode workers.
 
-### 7. Jellyseerr — `http://localhost:5055`
-- Sign in with Jellyfin account
-- Connect to Sonarr + Radarr using `http://sonarr:8989` etc.
-- Set request permissions for your users
+### 9. [Calibre-Web](docs/calibre-web.md) — `http://localhost:8083`
+Set the database path and enable the in-browser ebook viewer.
 
-### 8. Tdarr — `http://localhost:8265`
-- Add library pointing to `/media`
-- Configure an H.265 Nvidia NVENC plugin
-- Set worker count to 1 or 2
+### 10. [Komga](docs/komga.md) — `http://localhost:25600`
+Create an admin account and add the comics library at `/data/comics`.
 
-### 9. Recyclarr — config file only
-Edit [`config/recyclarr/recyclarr.yml`](config/recyclarr/recyclarr.yml):
-- Create `config/recyclarr/secrets.yml` with your Sonarr and Radarr API keys
-- Uncomment the quality profiles you want
-- Test manually: `docker compose exec recyclarr recyclarr sync`
+### 11. [Jellystat](docs/jellystat.md) — `http://localhost:8288`
+Connect to Jellyfin with a dedicated API key to start pulling watch history.
 
-### 10. Remaining services
-- **Jellystat** — connect to Jellyfin at `http://localhost:8096`
-- **Maintainerr** — connect to Jellyfin + Sonarr/Radarr, define cleanup rules
-- **Notifiarr** — add API key, configure Discord/Telegram webhook
-- **Uptime Kuma** — add an HTTP monitor for each service URL
-- **WG-Easy** — `http://localhost:51821` — create WireGuard client configs for your devices
+### 12. [Maintainerr](docs/maintainerr.md) — `http://localhost:6246`
+Connect to Jellyfin, Sonarr, and Radarr, then create rules to auto-delete watched media.
+
+### 13. [Uptime Kuma](docs/uptime-kuma.md) — `http://localhost:3001`
+Add one HTTP monitor per service and configure a notification channel.
+
+### 14. [WG-Easy](docs/wg-easy.md) — `http://localhost:51821`
+Create WireGuard clients for each device that needs remote access to your home network.
+
+### 15. [Cleanuparr](docs/cleanuparr.md) — `http://localhost:11011`
+Connect to *arr apps, then choose your scenario: Queue Cleaner (stalled downloads), Malware Blocker, or qBittorrent file exclusion.
+
+### 16. [Homepage](docs/homepage.md) — `http://localhost:3090`
+Tiles and widgets auto-populate from Docker labels once all API keys are in `.env`.
+
+### 17. [Autobrr](docs/autobrr.md) — `http://localhost:7474` _(optional — private trackers)_
+Connect to qBittorrent, add IRC networks and filters for each private tracker.
 
 ---
 
@@ -346,6 +439,27 @@ All service settings come back automatically — no UI reconfiguration needed.
 ### Real-Debrid
 A Zurg + rclone integration is planned for when a Real-Debrid subscription is added. This will mount the Real-Debrid library as a local folder at `/mnt/data/realdebrid`, making cached torrents available instantly without needing to download them. The VPN becomes optional for those downloads.
 
+### Vulnerability Scanning
+The Huntarr incident (exposed API keys, no auth, insecure code) is a reminder that community Docker images can be dangerous. Watchtower keeps images updated but doesn't check for known CVEs or bad practices.
+
+Planned addition: **Trivy** — the most widely used open-source container vulnerability scanner.
+
+```bash
+# Scan a single image on demand
+docker run --rm aquasec/trivy image lscr.io/linuxserver/sonarr:latest
+
+# Scan all images in the stack at once
+docker compose config | grep 'image:' | awk '{print $2}' | sort -u | \
+  xargs -I {} docker run --rm aquasec/trivy image {}
+```
+
+Longer term: add Trivy as a scheduled service in the compose that scans all images weekly and sends results via a notification channel.
+
+Beyond scanning, habits that reduce risk:
+- Prefer images from linuxserver.io, official Docker Hub, or well-known GitHub orgs — avoid random Docker Hub accounts
+- Check a project's GitHub before adding it — look at contributor count, recent activity, open issues
+- Review what ports a new container exposes before starting it
+
 ### Reverse Proxy + Domain
 When a domain is acquired, Nginx Proxy Manager or Traefik can be added to give each service a clean HTTPS URL and enable access from outside the home network without WireGuard (useful for sharing Jellyfin with others).
 
@@ -366,6 +480,30 @@ Community replacements built with security in mind:
 | **Seekarr** | Search automation for Sonarr/Radarr |
 
 **In the meantime:** Sonarr/Radarr/Lidarr have built-in scheduled searches under Settings → General → Task Schedule. Enable "Search for missing" and "Search for cutoff unmet" — covers the same use case without a third-party tool.
+
+### Photo Management (Immich)
+Self-hosted Google Photos replacement. Backs up photos and videos from your phone, with face recognition, album sharing, and a mobile app. Would live alongside Jellyfin — Jellyfin for media you download, Immich for personal photos.
+
+Immich requires four containers: `immich-server`, `immich-machine-learning` (AI features), a dedicated PostgreSQL instance with the pgvector extension, and Redis. Storage goes under `/mnt/data/photos`.
+
+- Image: `ghcr.io/immich-app/immich-server:release`
+- Port: `2283`
+- Docs: https://immich.app/docs/install/docker-compose
+
+### Metrics Dashboards (Prometheus + Grafana)
+Uptime Kuma covers availability (is the service up?), but Prometheus + Grafana adds time-series metrics: CPU, RAM, disk I/O, and per-container resource usage with historical graphs and alerting.
+
+The stack needs three additional containers:
+- **Prometheus** (`prom/prometheus`) — scrapes and stores metrics. Port `9090`.
+- **Grafana** (`grafana/grafana`) — visualization and dashboards. Port `3030`.
+- **node-exporter** (`prom/node-exporter`) — exports host system metrics (CPU, RAM, disk, network). Internal only.
+- **cAdvisor** (`gcr.io/cadvisor/cadvisor`) — exports per-container resource metrics. Internal only. Requires `privileged: true`.
+
+After adding, configure in Grafana:
+1. Add Prometheus data source: `http://prometheus:9090`
+2. Import community dashboards by ID from grafana.com:
+   - **1860** — Node Exporter Full (host system metrics)
+   - **14282** — Docker container metrics via cAdvisor
 
 ### Book Automation (Readarr replacement)
 Readarr (the *arr-style book manager) was retired in 2025. Candidates to replace it:

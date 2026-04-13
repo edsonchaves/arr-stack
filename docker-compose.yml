@@ -358,9 +358,13 @@ services:
       - JELLYFIN_PublishedServerUrl=http://${SERVER_LAN_IP}:8096
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=all
+      # WSL2: expose NVIDIA video codec libraries (libnvcuvid) to FFmpeg
+      - LD_LIBRARY_PATH=/usr/lib/wsl/lib
     volumes:
       - ${CONFIG_ROOT}/jellyfin:/config
       - ${DATA_ROOT}:/data
+      # WSL2: mount NVIDIA video codec libraries not automatically passed through
+      - /usr/lib/wsl/lib:/usr/lib/wsl/lib:ro
     ports:
       - "8096:8096"
       - "7359:7359/udp"   # Local network discovery
@@ -589,7 +593,7 @@ services:
       - homepage.weight=2
 
   maintainerr:
-    image: ghcr.io/jorenn92/maintainerr:latest
+    image: jorenn92/maintainerr:latest
     container_name: maintainerr
     restart: unless-stopped
     user: ${USER_ID}:${GROUP_ID}
@@ -607,25 +611,6 @@ services:
       - homepage.description=Auto-delete watched media
       - homepage.weight=3
 
-  notifiarr:
-    image: golift/notifiarr:latest
-    container_name: notifiarr
-    restart: always
-    environment:
-      - TZ=${TIMEZONE}
-    volumes:
-      - ${CONFIG_ROOT}/notifiarr:/config
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /etc/machine-id:/etc/machine-id:ro
-    ports:
-      - "5454:5454"
-    labels:
-      - homepage.group=System
-      - homepage.name=Notifiarr
-      - homepage.icon=notifiarr.png
-      - homepage.href=http://localhost:5454
-      - homepage.description=Notifications hub
-      - homepage.weight=4
 
   # ============================================================
   # DASHBOARD
@@ -644,13 +629,13 @@ services:
       - HOMEPAGE_VAR_WEATHER_LONG=${HOMEPAGE_VAR_WEATHER_LONG}
       - HOMEPAGE_VAR_WEATHER_TIME=${TIMEZONE}
       - HOMEPAGE_VAR_WEATHER_UNIT=${HOMEPAGE_VAR_WEATHER_UNIT}
+      - HOMEPAGE_ALLOWED_HOSTS=localhost:3090
     volumes:
       - ${CONFIG_ROOT}/homepage:/app/config
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ${DATA_ROOT}:/data
     ports:
-      - "3000:3000"
-    command: [sh, -c, "cp -n /app/config/tpl/*.yaml /app/config && node server.js"]
+      - "3090:3000"
 
   # ============================================================
   # OPTIONAL — PRIVATE TRACKERS
