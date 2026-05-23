@@ -47,3 +47,18 @@ Now that Sonarr, Radarr, and Lidarr are running, go back to Prowlarr and link th
 3. Test → Save after each one
 
 After this, every indexer in Prowlarr is available in all three apps — no manual indexer config needed inside each app.
+
+## 5. Torrentio custom indexers — do NOT set a debrid key
+
+The Torrentio indexers use custom Cardigann definitions in `config/prowlarr/Definitions/Custom/` (`torrentio.yml`, `torrentio-br-dublado-series.yml`).
+
+**Never fill in the "Debrid provider API Key" field on these indexers.** With a Real-Debrid key set, Torrentio returns `[RD download]` resolve-URL streams that have no `infoHash` field, which crashes the parser on every search:
+
+```
+CardigannException: Error while parsing field=infohash, selector=infoHash:
+Selector "infoHash" didn't match JSON content
+```
+
+The indexer then silently fails every query, Sonarr/Radarr put it in failure backoff, and new episodes stop being grabbed (this killed all ATVP-show grabs for ~3 weeks in Jul 2026). RD-mode streams are only usable inside Stremio anyway — Prowlarr → qBittorrent needs the plain infohash mode.
+
+The `|realdebrid=<key>` segment has been removed from the URL templates in `torrentio.yml`. Note when editing these definitions: Prowlarr's Cardigann template engine does **not** support nested `{{ if }}` blocks in `path:` — the inner block renders literally into the URL. Definitions are only reloaded on container restart (`docker restart prowlarr`).

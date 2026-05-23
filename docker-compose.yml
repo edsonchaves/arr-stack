@@ -540,6 +540,7 @@ services:
     volumes:
       - ${CONFIG_ROOT}/cleanuparr:/config
       - ${CONFIG_ROOT}/cleanuparr/logs:/var/logs
+      - ${DATA_ROOT}:/data
     ports:
       - "11011:11011"
     healthcheck:

@@ -1,17 +1,44 @@
 # Recyclarr Setup
 
-Recyclarr runs as a background service — no web UI. All configuration is done via config files.
+Recyclarr runs as a background service — no web UI. All configuration is done via config files. It syncs [TRaSH-Guides](https://trash-guides.info/) quality profiles and custom formats into Radarr and Sonarr.
 
 ## Config
 
-Edit [config/recyclarr/recyclarr.yml](../config/recyclarr/recyclarr.yml):
-
-1. Create `config/recyclarr/secrets.yml` with:
+1. Secrets — [config/recyclarr/secrets.yml](../config/recyclarr/secrets.yml):
    ```yaml
    sonarr_api_key: YOUR_SONARR_API_KEY
    radarr_api_key: YOUR_RADARR_API_KEY
    ```
-2. Uncomment the quality profiles you want in `recyclarr.yml`
-3. Test: `docker compose exec recyclarr recyclarr sync` — a successful run shows `✓ movies` and `✓ series` with quality sizes synced
+2. Profiles + CFs — [config/recyclarr/recyclarr.yml](../config/recyclarr/recyclarr.yml). Inline comments explain each section.
+
+## Common commands
+
+All run inside the `recyclarr` container:
+
+```bash
+# Preview without applying (always run after a config edit)
+docker compose exec recyclarr recyclarr sync --preview
+
+# Apply
+docker compose exec recyclarr recyclarr sync
+
+# Adopt a profile/CF you created manually so Recyclarr can manage it
+# (needed once if you want Recyclarr to take over an existing profile by name)
+docker compose exec recyclarr recyclarr state repair --adopt
+
+# List available TRaSH templates / profiles / CF groups
+docker compose exec recyclarr recyclarr list quality-profiles radarr
+docker compose exec recyclarr recyclarr list custom-format-groups sonarr
+```
+
+A successful run prints `✓ movies` and `✓ series` rows with non-error counts.
+
+## Tip: keep your own custom formats alongside TRaSH
+
+If you've added custom formats by hand in Radarr/Sonarr (e.g. subtitle/language preferences, accessibility flags) and want Recyclarr to leave them alone:
+
+- Set `reset_unmatched_scores.enabled: false` on every `quality_profile` entry. The starter TRaSH templates set this to `true`, which would zero out the score of any CF not declared in your Recyclarr config — including your manual ones.
+- Do not enable `delete_old_custom_formats: true` anywhere (default is already `false`).
+- Verify with `recyclarr sync --preview` after any config change: your manual CFs should not appear in any "Score Updates" or "Custom Format / Action: Delete" table.
 
 > **Note:** The `schedules` block was removed in newer Recyclarr versions — do not add it.
