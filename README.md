@@ -41,6 +41,7 @@ All services run on the internal `nas` Docker network and communicate via contai
 |---|---|---|
 | vpn (Gluetun) | — | Mullvad WireGuard VPN. qBittorrent routes all traffic through it |
 | qbittorrent | 8080 | Torrent client with VueTorrent UI. Will not download without a healthy VPN |
+| rdt-client | 6500 | Real-Debrid downloader. qBit-compatible API; downloads files via RD's CDN over HTTPS — no torrent peering on local IP, no VPN needed |
 
 ### Media Management
 
@@ -330,6 +331,9 @@ Add the FlareSolverr proxy and your indexers.
 
 ### 2. [qBittorrent](docs/qbittorrent.md) — `http://localhost:8080`
 Set credentials, download paths, categories, and seeding limits.
+
+### 2b. [rdt-client](docs/rdt-client.md) — `http://localhost:6500` *(optional, recommended)*
+Real-Debrid downloader — qBit-compatible API, no torrent peering on your local IP. Add the RD API token, set the download path, then point Sonarr/Radarr at it as a download client. With rdt-client at priority 1 and qBittorrent at priority 25, new grabs default to RD with qBit as a fallback.
 
 ### 3. [Sonarr / Radarr / Lidarr](docs/arr-apps.md)
 Configure authentication, root folders, and qBittorrent as the download client.

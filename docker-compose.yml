@@ -145,6 +145,50 @@ services:
       - homepage.widget.username=${QBITTORRENT_USERNAME}
       - homepage.widget.password=${QBITTORRENT_PASSWORD}
 
+  rdt-client:
+    # Real-Debrid downloader. Sonarr/Radarr add torrents here (it presents a
+    # qBittorrent-compatible API), rdt-client forwards the magnet to RD's
+    # servers (so no torrent traffic ever touches this network or VPN), then
+    # downloads the completed files from RD's CDN to local disk via HTTPS.
+    # End result: real local files, just like qBittorrent, without any
+    # torrent peering from your IP.
+    #
+    # Path layout: downloads land at ${DATA_ROOT}/torrents/rdt-client/, which
+    # *arr apps see at /data/torrents/rdt-client/ via their existing
+    # ${DATA_ROOT}:/data mount. No remote-path-mapping needed since the path
+    # is identical in both containers.
+    #
+    # Initial setup (after `docker compose up -d rdt-client`):
+    #   1. Open http://localhost:6500/ — set admin username/password on first visit
+    #   2. Settings → Provider: Real-Debrid; paste the RD API token
+    #   3. Settings → Download path: /data/torrents/rdt-client
+    #   4. In Sonarr/Radarr: Settings → Download Clients → Add → qBittorrent
+    #      Host: rdt-client   Port: 6500   Username/Password: as set in step 1
+    image: rogerfar/rdtclient:latest
+    container_name: rdt-client
+    restart: always
+    environment:
+      - PUID=${USER_ID}
+      - PGID=${GROUP_ID}
+      - TZ=${TIMEZONE}
+      - RD_API_TOKEN=${RD_API_TOKEN}
+    volumes:
+      - ${CONFIG_ROOT}/rdt-client:/data/db
+      - ${DATA_ROOT}/torrents/rdt-client:/data/torrents/rdt-client
+    ports:
+      - "6500:6500"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:6500/"]
+      interval: 1m
+      retries: 10
+    labels:
+      - homepage.group=Download
+      - homepage.name=rdt-client
+      - homepage.icon=rdt-client.png
+      - homepage.href=http://localhost:6500
+      - homepage.description=Real-Debrid downloader (local files)
+      - homepage.weight=2
+
   # ============================================================
   # MEDIA MANAGEMENT (*arr)
   # ============================================================
