@@ -10,6 +10,11 @@ services:
     restart: always
     environment:
       - AUTOHEAL_CONTAINER_LABEL=all
+      # Give containers time to shut down cleanly before SIGKILL (default 10s is tight)
+      - AUTOHEAL_DEFAULT_STOP_TIMEOUT=30
+      # Notification on restart events — set AUTOHEAL_WEBHOOK_URL in .env (e.g. ntfy.sh topic)
+      - WEBHOOK_URL=${AUTOHEAL_WEBHOOK_URL:-}
+      - APPRISE_URL=${AUTOHEAL_APPRISE_URL:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 
@@ -123,8 +128,9 @@ services:
       vpn:
         condition: service_healthy
     healthcheck:
-      # Also checks internet connectivity — unhealthy if VPN is down
-      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8080", "https://google.com"]
+      # Local UI only — VPN connectivity is checked by the vpn container's own healthcheck.
+      # Coupling the two led to cascading restart failures (autoheal can't reorder vpn-first).
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8080"]
       interval: 1m
       retries: 10
     labels:
@@ -182,6 +188,10 @@ services:
       - CAPTCHA_SOLVER=${CAPTCHA_SOLVER:-none}
       - TZ=${TIMEZONE}
     # Internal only — no port exposure needed
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8191/"]
+      interval: 1m
+      retries: 10
 
   sonarr:
     image: lscr.io/linuxserver/sonarr:latest
@@ -406,6 +416,10 @@ services:
       - ${DATA_ROOT}/media/books:/books
     ports:
       - "8083:8083"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8083"]
+      interval: 1m
+      retries: 10
     labels:
       - homepage.group=Media
       - homepage.name=Calibre-Web
@@ -430,6 +444,10 @@ services:
       - ${DATA_ROOT}/media/comics:/data/comics
     ports:
       - "25600:25600"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:25600/actuator/health"]
+      interval: 1m
+      retries: 10
     labels:
       - homepage.group=Media
       - homepage.name=Komga
@@ -464,6 +482,10 @@ services:
     ports:
       - "8265:8265"
       - "8266:8266"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8265"]
+      interval: 1m
+      retries: 10
     labels:
       - homepage.group=Download
       - homepage.name=Tdarr
@@ -495,6 +517,11 @@ services:
       - /tmp/tdarr_transcode_cache:/temp
     depends_on:
       - tdarr-server
+    healthcheck:
+      # Node has no HTTP endpoint of its own — probe its connection to the server.
+      test: ["CMD", "nc", "-z", "tdarr-server", "8266"]
+      interval: 1m
+      retries: 10
     deploy:
       resources:
         reservations:
@@ -567,6 +594,10 @@ services:
       - POSTGRES_PASSWORD=${JELLYSTAT_DB_PASSWORD}
     volumes:
       - ${CONFIG_ROOT}/jellystat-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "jellystat"]
+      interval: 1m
+      retries: 10
 
   jellystat:
     image: cyfershepard/jellystat:latest
@@ -604,6 +635,10 @@ services:
       - ${CONFIG_ROOT}/maintainerr:/opt/data
     ports:
       - "6246:6246"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:6246"]
+      interval: 1m
+      retries: 10
     labels:
       - homepage.group=System
       - homepage.name=Maintainerr
