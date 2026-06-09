@@ -42,6 +42,7 @@ All services run on the internal `nas` Docker network and communicate via contai
 | vpn (Gluetun) | — | Mullvad WireGuard VPN. qBittorrent routes all traffic through it |
 | qbittorrent | 8080 | Torrent client with VueTorrent UI. Will not download without a healthy VPN |
 | rdt-client | 6500 | Real-Debrid downloader. qBit-compatible API; downloads files via RD's CDN over HTTPS — no torrent peering on local IP, no VPN needed |
+| pinchflat | 8945 | YouTube channel/playlist subscriptions via yt-dlp. Names files as `Show/Season XX/SXXEYY` so Jellyfin matches them against TVDB |
 
 ### Media Management
 
@@ -112,6 +113,7 @@ All services run on the internal `nas` Docker network and communicate via contai
     ├── qbittorrent/
     ├── calibre-web/
     ├── komga/
+    ├── pinchflat/
     ├── tdarr/
     ├── recyclarr/
     │   └── recyclarr.yml     ← quality profile sync config
@@ -130,7 +132,8 @@ All services run on the internal `nas` Docker network and communicate via contai
 │   ├── tv/
 │   ├── music/
 │   ├── books/
-│   └── comics/
+│   ├── comics/
+│   └── youtube-shows/   ← Pinchflat-managed series (Show/Season XX/SXXEYY)
 └── torrents/
     ├── movies/
     ├── tv/
@@ -249,14 +252,14 @@ sudo systemctl restart docker
 ### Step 1 — Create storage directories
 
 ```bash
-sudo mkdir -p /mnt/data/{media/{movies,tv,music,books,comics},torrents/{movies,tv,music,other}}
+sudo mkdir -p /mnt/data/{media/{movies,tv,music,books,comics,youtube-shows},torrents/{movies,tv,music,other}}
 sudo chown -R $USER:$USER /mnt/data
 ```
 
 ### Step 2 — Create config directories
 
 ```bash
-mkdir -p ~/nas-server/config/{sonarr,radarr,lidarr,bazarr,jellyfin,jellyseerr,prowlarr,qbittorrent,calibre-web,komga,homepage,cleanuparr,tdarr/{server,configs,logs},recyclarr,jellystat,jellystat-db,maintainerr,uptime-kuma,wg-easy,autobrr}
+mkdir -p ~/nas-server/config/{sonarr,radarr,lidarr,bazarr,jellyfin,jellyseerr,prowlarr,qbittorrent,calibre-web,komga,pinchflat,homepage,cleanuparr,tdarr/{server,configs,logs},recyclarr,jellystat,jellystat-db,maintainerr,uptime-kuma,wg-easy,autobrr}
 ```
 
 ### Step 3 — Create and fill in `.env`
@@ -385,7 +388,10 @@ Connect to *arr apps, then choose your scenario: Queue Cleaner (stalled download
 ### 16. [Homepage](docs/homepage.md) — `http://localhost:3090`
 Tiles and widgets auto-populate from Docker labels once all API keys are in `.env`.
 
-### 17. [Autobrr](docs/autobrr.md) — `http://localhost:7474` _(optional — private trackers)_
+### 17. [Pinchflat](docs/pinchflat.md) — `http://localhost:8945`
+Subscribe to YouTube channels or playlists that should appear in Jellyfin as a TV show (e.g. PT-BR-dubbed Bluey / Pokémon playlists). Files land in `/mnt/data/media/youtube-shows/` with `Show/Season XX/SXXEYY` naming so TVDB metadata matches automatically.
+
+### 18. [Autobrr](docs/autobrr.md) — `http://localhost:7474` _(optional — private trackers)_
 Connect to qBittorrent, add IRC networks and filters for each private tracker.
 
 ---

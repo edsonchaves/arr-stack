@@ -192,6 +192,37 @@ services:
       - homepage.description=Real-Debrid downloader (local files)
       - homepage.weight=2
 
+  pinchflat:
+    # YouTube channel/playlist subscription manager. Treats each channel or
+    # playlist as a "show", names files as Show/Season XX/SXXEYY so Jellyfin
+    # matches them against TVDB (perfect for Bluey/Pokémon-style content
+    # uploaded to YouTube). Polls for new uploads on a schedule.
+    # Output lives at /data/media/youtube-shows/ — separate from MeTube's
+    # one-off folder and from Sonarr's /data/media/tv/.
+    image: ghcr.io/kieraneglin/pinchflat:latest
+    container_name: pinchflat
+    restart: always
+    user: ${USER_ID}:${GROUP_ID}
+    environment:
+      - TZ=${TIMEZONE}
+      - LOG_LEVEL=info
+    volumes:
+      - ${CONFIG_ROOT}/pinchflat:/config
+      - ${DATA_ROOT}/media/youtube-shows:/downloads
+    ports:
+      - "8945:8945"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8945/"]
+      interval: 1m
+      retries: 10
+    labels:
+      - homepage.group=Download
+      - homepage.name=Pinchflat
+      - homepage.icon=pinchflat.png
+      - homepage.href=http://localhost:8945
+      - homepage.description=YouTube channel subscriptions
+      - homepage.weight=4
+
   # ============================================================
   # MEDIA MANAGEMENT (*arr)
   # ============================================================
