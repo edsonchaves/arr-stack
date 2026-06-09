@@ -124,6 +124,9 @@ services:
     volumes:
       - ${CONFIG_ROOT}/qbittorrent:/config
       - ${DATA_ROOT}/torrents:/data/torrents
+      # Clears stale ipc-socket/lockfile on start so an unclean shutdown
+      # (WSL2 idle-suspend) doesn't crash-loop qBittorrent. See scripts/.
+      - ./scripts/qbittorrent-clear-stale-lock.sh:/custom-cont-init.d/10-clear-stale-lock.sh:ro
     depends_on:
       vpn:
         condition: service_healthy
