@@ -23,3 +23,56 @@
    - **OpenSubtitles.com** — Large general library
 
 > **Save to `.env`:** Settings → General → Security → copy the API Key → paste as `BAZARR_API_KEY` in `.env`
+
+## PT-BR re-search bridge (Sonarr upgrade loop)
+
+Bazarr retries subtitle providers on its own, but for **anime** the PT-BR sub
+usually ships *embedded* in a later release (ToonsHub/CR `Multi-Subs`) rather
+than appearing on Legendas.net/OpenSubtitles — and Sonarr never re-searches an
+episode it already downloaded, so an English-only fansub grab (Asakura,
+SubsPlease, FLE…) stays forever.
+
+Bridge: `scripts/sonarr-research-missing-ptbr.sh` (cron, daily 06:15)
+
+1. Reads Bazarr's wanted list (episodes still missing PT-BR)
+2. Filters to episodes aired in the last 45 days, caps at 20 per run
+3. Triggers a Sonarr `EpisodeSearch` — upgrade-only, since `Subs PT-BR`
+   (+1000) and `Multi-Subs` (+200) CFs outscore the current file and cutoff
+   score is 10000 (never met)
+4. Self-terminating per episode: once a PT-BR sub exists (embedded or
+   downloaded by Bazarr), it leaves the wanted list and stops being searched
+
+Log: `logs/sonarr-research-ptbr.log`
+
+Known gaps this can't fix:
+- **AMZN-only titles not licensed in Brazil** (e.g. False Memory): no PT
+  track exists at the source; only a human upload to Legendas.net helps.
+  (Verified 2026-08-30: the AMZN "Multi-Subs" release carries eng/ger/ind/
+  rus/tha and the BILI release only eng/tha — "Multi-Subs" in a title does
+  NOT guarantee PT-BR; only CR-source Multi-Subs does.)
+- `legendasdivx` provider has broken credentials (AuthenticationError,
+  12h throttle) — PT-PT anyway; fix or remove in Settings → Providers.
+
+## AniDB client + animetosho status (2026-08-30)
+
+Settings → Providers → AniDB is filled with HTTP API client `hellyy` / ver 1
+(registered at anidb.net → software → project "hellyy"; the client string is
+the lowercase per-client name, NOT the project name — AniDB answers error 302
+"client version missing or invalid" for any wrong name/case/type). This makes
+the AniDB refiner map Sonarr episodes to AniDB episode ids, which the
+animetosho provider needs.
+
+**However animetosho.org shut down permanently on 2026-05-09** (official
+notice; frozen archive until ~Oct 2026). The provider still serves embedded
+subs for pre-May-2026 anime, nothing after. No Bazarr provider exists yet for
+the successors (ameNZB, Anime Tosho NEW, aninzb, TsukiHime, Otakuness) — check
+periodically. Until then, PT-BR for airing anime comes from Sonarr grabbing
+CR Multi-Subs releases directly (see `CR Multi-Subs` CF note in
+`config/recyclarr/recyclarr.yml` and docs/recyclarr.md).
+
+## Minimum score (lowered 2026-08-30)
+
+Settings → Subtitles → minimum score for series was **90**, which silently
+discarded real matches (Rick and Morty PT-BR found at 61–69 and rejected).
+Lowered to **65** (movies were already 70). Trade-off: occasional out-of-sync
+subtitle; Bazarr's upgrade loop can replace them later.

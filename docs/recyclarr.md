@@ -42,3 +42,25 @@ If you've added custom formats by hand in Radarr/Sonarr (e.g. subtitle/language 
 - Verify with `recyclarr sync --preview` after any config change: your manual CFs should not appear in any "Score Updates" or "Custom Format / Action: Delete" table.
 
 > **Note:** The `schedules` block was removed in newer Recyclarr versions — do not add it.
+
+## CR Multi-Subs CF (added 2026-08-30)
+
+Manual Sonarr CF `CR Multi-Subs` (+500 in `[Anime] Remux-1080p` only): matches
+releases whose title has **both** a Crunchyroll source marker (`CR`,
+`CrunchyRoll`) **and** a Multi-Subs pattern (two required
+`ReleaseTitleSpecification` conditions — AND semantics; the Multi-Subs half is
+the six regexes of the `Multi-Subs` CF collapsed into one alternation, since
+only one non-required condition of a type needs to match otherwise).
+
+Why: CR Multi-Subs releases (Erai-raws, ToonsHub CR) always embed a PT-BR sub
+track, but scored 506 vs. subs-less Anime Web Tier 01 groups (FLE etc.) at
+600, so Sonarr never swapped to the release that actually has Portuguese.
+With +500 a CR Multi-Subs release scores ~1006: above every Anime Web tier
+stack, still below Anime BD tiers (1000–1400), so BD upgrades stay possible.
+This became the primary PT-BR path for airing anime after animetosho.org shut
+down (2026-05-09) — Bazarr can no longer fetch embedded fansub subs for new
+episodes.
+
+Like the other manual CFs it is local (no trash_id) and survives syncs via
+`reset_unmatched_scores: false`; it is listed in the safety comment block at
+the top of `config/recyclarr/recyclarr.yml`.
