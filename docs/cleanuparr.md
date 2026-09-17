@@ -32,7 +32,6 @@ Without `/data`, Unlinked Downloads silently does nothing.
    |---|---|---|
    | Sonarr | `http://sonarr:8989` | Sonarr → Settings → General → Security |
    | Radarr | `http://radarr:7878` | Radarr → Settings → General → Security |
-   | Lidarr | `http://lidarr:8686` | Lidarr → Settings → General → Security |
 
 ## 2. Queue Cleaner
 
@@ -70,7 +69,7 @@ Cleans up finished torrents based on ratio/seed time and orphaned torrents whose
 2. **Seeding Rules** → `+ Add Seeding Rule` for the standard cleanup:
    - Rule Name: `Standard cleanup`
    - Privacy Type: `Both`
-   - Categories: `radarr`, `tv-sonarr`, `lidarr-music`
+   - Categories: `radarr`, `tv-sonarr`
    - Max Ratio: `2`
    - Min Seed Time: `24` hours
    - Max Seed Time: `168` hours (7 days)
@@ -88,7 +87,7 @@ Cleans up finished torrents based on ratio/seed time and orphaned torrents whose
    - Target Category: `cleanup` (must match the Unlinked cleanup rule)
    - Use Tag Instead: off
    - Download Directory / Local Directory: blank (paths match thanks to the `/data` mount)
-   - Unlinked Categories: `radarr`, `tv-sonarr`, `lidarr-music`
+   - Unlinked Categories: `radarr`, `tv-sonarr`
    - Save Unlinked Config
 
 ## 4. Malware Blocker / Content Blocker

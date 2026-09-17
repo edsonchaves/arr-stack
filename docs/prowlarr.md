@@ -24,29 +24,29 @@ FlareSolverr bypasses Cloudflare protection on indexers that require it (e.g. 13
 4. Test → Save
 5. Repeat for each indexer you want to add
 
-> You will connect Prowlarr to Sonarr/Radarr/Lidarr after those apps are configured.
+> You will connect Prowlarr to Sonarr/Radarr after those apps are configured.
 
 > **Save to `.env`:** Settings → General → Security → copy the API Key → paste as `PROWLARR_API_KEY` in `.env`
 
 ## 4. Connect Prowlarr to *arr apps
 
-Now that Sonarr, Radarr, and Lidarr are running, go back to Prowlarr and link them. This pushes all your indexers to each app automatically.
+Now that Sonarr and Radarr are running, go back to Prowlarr and link them. This pushes all your indexers to each app automatically.
 
 1. Prowlarr → Settings → Apps → + Add Application
 2. Add each app separately using the values below.
    The pre-filled URLs use `localhost` — replace them with container names so the containers can reach each other:
 
-   | Field | Sonarr | Radarr | Lidarr |
-   |---|---|---|---|
-   | Sync Level | `Full Sync` | `Full Sync` | `Full Sync` |
-   | Tags | leave empty | leave empty | leave empty |
-   | Prowlarr Server | `http://prowlarr:9696` | `http://prowlarr:9696` | `http://prowlarr:9696` |
-   | App Server | `http://sonarr:8989` | `http://radarr:7878` | `http://lidarr:8686` |
-   | API Key | Sonarr → Settings → General → Security → API Key | same for Radarr | same for Lidarr |
+   | Field | Sonarr | Radarr |
+   |---|---|---|
+   | Sync Level | `Full Sync` | `Full Sync` |
+   | Tags | leave empty | leave empty |
+   | Prowlarr Server | `http://prowlarr:9696` | `http://prowlarr:9696` |
+   | App Server | `http://sonarr:8989` | `http://radarr:7878` |
+   | API Key | Sonarr → Settings → General → Security → API Key | same for Radarr |
 
 3. Test → Save after each one
 
-After this, every indexer in Prowlarr is available in all three apps — no manual indexer config needed inside each app.
+After this, every indexer in Prowlarr is available in both apps — no manual indexer config needed inside each app.
 
 ## 5. Torrentio custom indexers — do NOT set a debrid key
 

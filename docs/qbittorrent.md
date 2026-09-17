@@ -25,7 +25,6 @@ Used by *arr apps to sort downloads into the right folders:
 1. Right-click the category list on the left → Add category:
    - `tv-sonarr` → save path `/data/torrents/tv`
    - `radarr` → save path `/data/torrents/movies`
-   - `lidarr-music` → save path `/data/torrents/music`
 
 ## Seeding limits
 

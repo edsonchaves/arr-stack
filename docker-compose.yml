@@ -27,63 +27,6 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 
-  uptime-kuma:
-    image: louislam/uptime-kuma:latest
-    container_name: uptime-kuma
-    restart: always
-    ports:
-      - "3001:3001"
-    volumes:
-      - ${CONFIG_ROOT}/uptime-kuma:/app/data
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://127.0.0.1:3001"]
-      interval: 1m
-      retries: 10
-    labels:
-      - homepage.group=System
-      - homepage.name=Uptime Kuma
-      - homepage.icon=uptime-kuma.png
-      - homepage.href=http://localhost:3001
-      - homepage.description=Service monitoring
-      - homepage.weight=0
-      - homepage.widget.type=uptimekuma
-      - homepage.widget.url=http://uptime-kuma:3001
-      - homepage.widget.slug=nas
-
-  wg-easy:
-    image: ghcr.io/wg-easy/wg-easy:latest
-    container_name: wg-easy
-    restart: always
-    environment:
-      - LANG=en
-      - WG_HOST=${SERVER_LAN_IP}
-      - PASSWORD_HASH=${WGEASY_PASSWORD_HASH}
-      - WG_DEFAULT_DNS=1.1.1.1,8.8.8.8
-      - UI_TRAFFIC_STATS=true
-      - TZ=${TIMEZONE}
-    ports:
-      - "51820:51820/udp"
-      - "51821:51821/tcp"
-    volumes:
-      - ${CONFIG_ROOT}/wg-easy:/etc/wireguard
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    sysctls:
-      - net.ipv4.ip_forward=1
-      - net.ipv4.conf.all.src_valid_mark=1
-    labels:
-      - homepage.group=System
-      - homepage.name=WG-Easy
-      - homepage.icon=wireguard.png
-      - homepage.href=http://localhost:51821
-      - homepage.description=Remote access VPN
-      - homepage.weight=1
-
-  # ============================================================
-  # VPN + DOWNLOAD
-  # ============================================================
-
   vpn:
     image: qmcgaw/gluetun:latest
     container_name: vpn
@@ -147,50 +90,6 @@ services:
       - homepage.widget.url=http://vpn:8080
       - homepage.widget.username=${QBITTORRENT_USERNAME}
       - homepage.widget.password=${QBITTORRENT_PASSWORD}
-
-  rdt-client:
-    # Real-Debrid downloader. Sonarr/Radarr add torrents here (it presents a
-    # qBittorrent-compatible API), rdt-client forwards the magnet to RD's
-    # servers (so no torrent traffic ever touches this network or VPN), then
-    # downloads the completed files from RD's CDN to local disk via HTTPS.
-    # End result: real local files, just like qBittorrent, without any
-    # torrent peering from your IP.
-    #
-    # Path layout: downloads land at ${DATA_ROOT}/torrents/rdt-client/, which
-    # *arr apps see at /data/torrents/rdt-client/ via their existing
-    # ${DATA_ROOT}:/data mount. No remote-path-mapping needed since the path
-    # is identical in both containers.
-    #
-    # Initial setup (after `docker compose up -d rdt-client`):
-    #   1. Open http://localhost:6500/ — set admin username/password on first visit
-    #   2. Settings → Provider: Real-Debrid; paste the RD API token
-    #   3. Settings → Download path: /data/torrents/rdt-client
-    #   4. In Sonarr/Radarr: Settings → Download Clients → Add → qBittorrent
-    #      Host: rdt-client   Port: 6500   Username/Password: as set in step 1
-    image: rogerfar/rdtclient:latest
-    container_name: rdt-client
-    restart: always
-    environment:
-      - PUID=${USER_ID}
-      - PGID=${GROUP_ID}
-      - TZ=${TIMEZONE}
-      - RD_API_TOKEN=${RD_API_TOKEN}
-    volumes:
-      - ${CONFIG_ROOT}/rdt-client:/data/db
-      - ${DATA_ROOT}/torrents/rdt-client:/data/torrents/rdt-client
-    ports:
-      - "6500:6500"
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://127.0.0.1:6500/"]
-      interval: 1m
-      retries: 10
-    labels:
-      - homepage.group=Download
-      - homepage.name=rdt-client
-      - homepage.icon=rdt-client.png
-      - homepage.href=http://localhost:6500
-      - homepage.description=Real-Debrid downloader (local files)
-      - homepage.weight=2
 
   pinchflat:
     # YouTube channel/playlist subscription manager. Treats each channel or
@@ -327,36 +226,6 @@ services:
       - homepage.widget.url=http://radarr:7878
       - homepage.widget.key=${RADARR_API_KEY}
 
-  lidarr:
-    image: lscr.io/linuxserver/lidarr:latest
-    container_name: lidarr
-    restart: always
-    environment:
-      - PUID=${USER_ID}
-      - PGID=${GROUP_ID}
-      - TZ=${TIMEZONE}
-    volumes:
-      - ${CONFIG_ROOT}/lidarr:/config
-      - ${DATA_ROOT}:/data
-    ports:
-      - "8686:8686"
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8686/ping"]
-      interval: 1m
-      retries: 10
-    labels:
-      - homepage.group=Media
-      - homepage.name=Lidarr
-      - homepage.icon=lidarr.png
-      - homepage.href=http://localhost:8686
-      - homepage.description=Music
-      - homepage.weight=2
-      - homepage.widget.type=lidarr
-      - homepage.widget.url=http://lidarr:8686
-      - homepage.widget.key=${LIDARR_API_KEY}
-
-  # readarr: project retired — https://readarr.com/ — use Calibre-Web for book management
-
   bazarr:
     image: lscr.io/linuxserver/bazarr:latest
     container_name: bazarr
@@ -479,139 +348,6 @@ services:
       - homepage.widget.url=http://jellyfin:8096
       - homepage.widget.key=${JELLYFIN_API_KEY}
 
-  calibre-web:
-    image: lscr.io/linuxserver/calibre-web:latest
-    container_name: calibre-web
-    restart: unless-stopped
-    environment:
-      - PUID=${USER_ID}
-      - PGID=${GROUP_ID}
-      - TZ=${TIMEZONE}
-      - DOCKER_MODS=linuxserver/mods:universal-calibre
-      - OAUTHLIB_RELAX_TOKEN_SCOPE=1
-    volumes:
-      - ${CONFIG_ROOT}/calibre-web:/config
-      - ${DATA_ROOT}/media/books:/books
-    ports:
-      - "8083:8083"
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8083"]
-      interval: 1m
-      retries: 10
-    labels:
-      - homepage.group=Media
-      - homepage.name=Calibre-Web
-      - homepage.icon=calibre-web.png
-      - homepage.href=http://localhost:8083
-      - homepage.description=Books
-      - homepage.weight=6
-      - homepage.widget.type=calibreweb
-      - homepage.widget.url=http://calibre-web:8083
-      - homepage.widget.username=${CALIBRE_USERNAME}
-      - homepage.widget.password=${CALIBRE_PASSWORD}
-
-  komga:
-    image: gotson/komga:latest
-    container_name: komga
-    restart: unless-stopped
-    user: ${USER_ID}:${GROUP_ID}
-    environment:
-      - TZ=${TIMEZONE}
-    volumes:
-      - ${CONFIG_ROOT}/komga:/config
-      - ${DATA_ROOT}/media/comics:/data/comics
-    ports:
-      - "25600:25600"
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://127.0.0.1:25600/actuator/health"]
-      interval: 1m
-      retries: 10
-    labels:
-      - homepage.group=Media
-      - homepage.name=Komga
-      - homepage.icon=komga.png
-      - homepage.href=http://localhost:25600
-      - homepage.description=Comics and manga
-      - homepage.weight=7
-
-  # ============================================================
-  # TRANSCODING
-  # ============================================================
-
-  tdarr-server:
-    image: ghcr.io/haveagitgat/tdarr:latest
-    container_name: tdarr-server
-    restart: always
-    environment:
-      - TZ=${TIMEZONE}
-      - PUID=${USER_ID}
-      - PGID=${GROUP_ID}
-      - serverIP=0.0.0.0
-      - serverPort=8266
-      - webUIPort=8265
-      - internalNode=false
-      - inContainer=true
-    volumes:
-      - ${CONFIG_ROOT}/tdarr/server:/app/server
-      - ${CONFIG_ROOT}/tdarr/configs:/app/configs
-      - ${CONFIG_ROOT}/tdarr/logs:/app/logs
-      - ${DATA_ROOT}/media:/media
-      - /tmp/tdarr_transcode_cache:/temp
-    ports:
-      - "8265:8265"
-      - "8266:8266"
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8265"]
-      interval: 1m
-      retries: 10
-    labels:
-      - homepage.group=Download
-      - homepage.name=Tdarr
-      - homepage.icon=tdarr.png
-      - homepage.href=http://localhost:8265
-      - homepage.description=Media transcoding (H.265)
-      - homepage.weight=5
-
-  tdarr-node:
-    image: ghcr.io/haveagitgat/tdarr_node:latest
-    container_name: tdarr-node
-    restart: always
-    # Nvidia GPU for H.265 hardware encoding
-    runtime: nvidia
-    environment:
-      - TZ=${TIMEZONE}
-      - PUID=${USER_ID}
-      - PGID=${GROUP_ID}
-      - nodeName=MainNode
-      - serverIP=tdarr-server
-      - serverPort=8266
-      - inContainer=true
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=all
-    volumes:
-      - ${CONFIG_ROOT}/tdarr/configs:/app/configs
-      - ${CONFIG_ROOT}/tdarr/logs:/app/logs
-      - ${DATA_ROOT}/media:/media
-      - /tmp/tdarr_transcode_cache:/temp
-    depends_on:
-      - tdarr-server
-    healthcheck:
-      # Node has no HTTP endpoint of its own — probe its connection to the server.
-      test: ["CMD", "nc", "-z", "tdarr-server", "8266"]
-      interval: 1m
-      retries: 10
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-
-  # ============================================================
-  # AUTOMATION & MONITORING
-  # ============================================================
-
   unpackerr:
     # Automatically extracts compressed downloads (.rar, .zip) after *arr apps finish
     image: ghcr.io/unpackerr/unpackerr:latest
@@ -624,15 +360,10 @@ services:
       - UN_SONARR_0_API_KEY=${SONARR_API_KEY}
       - UN_RADARR_0_URL=http://radarr:7878
       - UN_RADARR_0_API_KEY=${RADARR_API_KEY}
-      - UN_LIDARR_0_URL=http://lidarr:8686
-      - UN_LIDARR_0_API_KEY=${LIDARR_API_KEY}
     volumes:
       - ${DATA_ROOT}/torrents:/data/torrents
     security_opt:
       - no-new-privileges:true
-
-  # huntarr: DO NOT USE — removed Feb 2026, exposed all arr API keys/passwords with no auth
-  # Alternatives: Fetcharr, Newtarr, Seekarr — see README Future Plans section
 
   cleanuparr:
     image: ghcr.io/cleanuparr/cleanuparr:latest
@@ -725,7 +456,6 @@ services:
       - homepage.description=Auto-delete watched media
       - homepage.weight=3
 
-
   # ============================================================
   # DASHBOARD
   # ============================================================
@@ -750,35 +480,6 @@ services:
       - ${DATA_ROOT}:/data
     ports:
       - "3090:3000"
-
-  # ============================================================
-  # OPTIONAL — PRIVATE TRACKERS
-  # To enable: docker compose --profile private-trackers up -d autobrr
-  # ============================================================
-
-  autobrr:
-    image: ghcr.io/autobrr/autobrr:latest
-    container_name: autobrr
-    restart: always
-    environment:
-      - TZ=${TIMEZONE}
-    user: ${USER_ID}:${GROUP_ID}
-    volumes:
-      - ${CONFIG_ROOT}/autobrr:/config
-    ports:
-      - "7474:7474"
-    labels:
-      - homepage.group=Download
-      - homepage.name=Autobrr
-      - homepage.icon=autobrr.png
-      - homepage.href=http://localhost:7474
-      - homepage.description=Private tracker automation
-      - homepage.weight=9
-      - homepage.widget.type=autobrr
-      - homepage.widget.url=http://autobrr:7474
-      - homepage.widget.key=${AUTOBRR_API_KEY}
-    profiles:
-      - private-trackers
 
 networks:
   default:
