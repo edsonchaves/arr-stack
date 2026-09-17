@@ -1,0 +1,8 @@
+# Intel QuickSync via /dev/dri. COMPOSE_FILE=docker-compose.yml:docker-compose.intel.yml
+# RENDER_GID = `getent group render | cut -d: -f3`. Alder Lake-N needs i915 enable_guc=2 (see docs/jellyfin.md)
+services:
+  jellyfin:
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "${RENDER_GID}"

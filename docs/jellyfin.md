@@ -22,8 +22,20 @@ The first launch runs a setup wizard:
 
 5. **Allow remote connections** — enable this. When you connect via WireGuard VPN, your device gets a VPN IP that Jellyfin sees as remote — disabling this would block those devices. Since there is no port forwarding set up, the internet cannot reach Jellyfin directly regardless of this setting.
 
-## Hardware transcoding (Nvidia)
+## Hardware transcoding
 
+Which backend applies depends on the compose override selected via `COMPOSE_FILE` in `.env` (see README → GPU passthrough).
+
+**Intel QSV** (`docker-compose.intel.yml`, i3-N305 iGPU):
+- Admin Dashboard → Playback → Transcoding:
+  - Hardware acceleration → `Intel QuickSync (QSV)`
+  - QSV device → `/dev/dri/renderD128`
+  - Enable hardware decoding for: check `H264`, `HEVC`, `HEVC 10bit`, `VP9`, `AV1`
+  - Enable hardware encoding → on; Allow encoding in HEVC format → on
+  - Enable Intel Low-Power H.264/HEVC hardware encoder → on (mandatory on Alder Lake-N — the iGPU has no full-power encoder)
+  - Save
+
+**Nvidia NVENC** (`docker-compose.nvidia-wsl.yml`):
 - Admin Dashboard → Playback → Transcoding:
   - Hardware acceleration → `Nvidia NVENC`
   - Enable hardware decoding for: check `H264`, `HEVC`, `VC1`, `VP9`, `HEVC 10bit`, `VP9 10bit` (enable `AV1` too if you have an RTX 30xx or newer)

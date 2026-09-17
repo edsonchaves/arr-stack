@@ -55,8 +55,8 @@ Known gaps this can't fix:
 
 ## AniDB client + animetosho status (2026-08-30)
 
-Settings → Providers → AniDB is filled with HTTP API client `hellyy` / ver 1
-(registered at anidb.net → software → project "hellyy"; the client string is
+Settings → Providers → AniDB is filled with HTTP API client `<your-client-name>` / ver 1
+(registered at anidb.net → software → your project; the client string is
 the lowercase per-client name, NOT the project name — AniDB answers error 302
 "client version missing or invalid" for any wrong name/case/type). This makes
 the AniDB refiner map Sonarr episodes to AniDB episode ids, which the

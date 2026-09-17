@@ -1,0 +1,19 @@
+# NVIDIA NVENC on WSL2. COMPOSE_FILE=docker-compose.yml:docker-compose.nvidia-wsl.yml
+# Requires nvidia-container-toolkit (see README)
+services:
+  jellyfin:
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - LD_LIBRARY_PATH=/usr/lib/wsl/lib
+    volumes:
+      # WSL2 does not pass libnvcuvid into containers
+      - /usr/lib/wsl/lib:/usr/lib/wsl/lib:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

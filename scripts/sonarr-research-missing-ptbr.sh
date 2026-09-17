@@ -16,7 +16,7 @@
 # Runs from cron; see crontab. Requires: curl, python3.
 set -euo pipefail
 
-NAS_DIR="/home/edson/nas-server"
+NAS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SONARR_URL="http://localhost:8989"
 BAZARR_URL="http://localhost:6767"
 export MAX_AGE_DAYS=45   # only re-search episodes that aired recently; old backlog rarely gets new releases

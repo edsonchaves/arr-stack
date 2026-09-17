@@ -42,7 +42,6 @@ services:
       - WIREGUARD_ADDRESSES=${MULLVAD_ADDRESSES}
       - SERVER_CITIES=${MULLVAD_CITY}
       - TZ=${TIMEZONE}
-    # qBittorrent web UI port is exposed here since qbittorrent shares this container's network
     ports:
       - "8080:8080"
     healthcheck:
@@ -56,7 +55,6 @@ services:
     image: lscr.io/linuxserver/qbittorrent:libtorrentv1
     container_name: qbittorrent
     restart: always
-    # Routes all traffic through the VPN container
     network_mode: "service:vpn"
     environment:
       - PUID=${USER_ID}
@@ -67,15 +65,13 @@ services:
     volumes:
       - ${CONFIG_ROOT}/qbittorrent:/config
       - ${DATA_ROOT}/torrents:/data/torrents
-      # Clears stale ipc-socket/lockfile on start so an unclean shutdown
-      # (WSL2 idle-suspend) doesn't crash-loop qBittorrent. See scripts/.
+      # Stale lock/socket after an unclean shutdown crash-loops qBittorrent
       - ./scripts/qbittorrent-clear-stale-lock.sh:/custom-cont-init.d/10-clear-stale-lock.sh:ro
     depends_on:
       vpn:
         condition: service_healthy
     healthcheck:
-      # Local UI only — VPN connectivity is checked by the vpn container's own healthcheck.
-      # Coupling the two led to cascading restart failures (autoheal can't reorder vpn-first).
+      # UI only. Checking VPN here caused cascading restarts (autoheal can't order vpn first)
       test: ["CMD", "curl", "--fail", "http://127.0.0.1:8080"]
       interval: 1m
       retries: 10
@@ -92,12 +88,6 @@ services:
       - homepage.widget.password=${QBITTORRENT_PASSWORD}
 
   pinchflat:
-    # YouTube channel/playlist subscription manager. Treats each channel or
-    # playlist as a "show", names files as Show/Season XX/SXXEYY so Jellyfin
-    # matches them against TVDB (perfect for Bluey/Pokémon-style content
-    # uploaded to YouTube). Polls for new uploads on a schedule.
-    # Output lives at /data/media/youtube-shows/ — separate from MeTube's
-    # one-off folder and from Sonarr's /data/media/tv/.
     image: ghcr.io/kieraneglin/pinchflat:latest
     container_name: pinchflat
     restart: always
@@ -154,8 +144,6 @@ services:
       - homepage.widget.key=${PROWLARR_API_KEY}
 
   flaresolverr:
-    # Bypasses Cloudflare protection on indexers that require it
-    # Add to Prowlarr: Settings → Indexers → Add FlareSolverr → URL: http://flaresolverr:8191
     image: 21hsmw/flaresolverr:nodriver
     container_name: flaresolverr
     restart: always
@@ -164,7 +152,6 @@ services:
       - LOG_HTML=${LOG_HTML:-false}
       - CAPTCHA_SOLVER=${CAPTCHA_SOLVER:-none}
       - TZ=${TIMEZONE}
-    # Internal only — no port exposure needed
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://127.0.0.1:8191/"]
       interval: 1m
@@ -284,9 +271,6 @@ services:
       - homepage.widget.key=${JELLYSEERR_API_KEY}
 
   recyclarr:
-    # Syncs TRaSH Guide quality profiles to Sonarr and Radarr automatically
-    # Configure sync targets in config/recyclarr/recyclarr.yml
-    # Runs on the schedule defined in recyclarr.yml (schedules section)
     image: ghcr.io/recyclarr/recyclarr:latest
     container_name: recyclarr
     restart: unless-stopped
@@ -304,24 +288,15 @@ services:
     image: lscr.io/linuxserver/jellyfin:latest
     container_name: jellyfin
     restart: always
-    # Nvidia GPU passthrough for hardware transcoding
-    # Requires: nvidia-container-toolkit installed on host
-    # Host setup: nvidia-ctk runtime configure --runtime=docker && systemctl restart docker
-    runtime: nvidia
+    # GPU passthrough: docker-compose.intel.yml / docker-compose.nvidia-wsl.yml via COMPOSE_FILE
     environment:
       - PUID=${USER_ID}
       - PGID=${GROUP_ID}
       - TZ=${TIMEZONE}
       - JELLYFIN_PublishedServerUrl=http://${SERVER_LAN_IP}:8096
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=all
-      # WSL2: expose NVIDIA video codec libraries (libnvcuvid) to FFmpeg
-      - LD_LIBRARY_PATH=/usr/lib/wsl/lib
     volumes:
       - ${CONFIG_ROOT}/jellyfin:/config
       - ${DATA_ROOT}:/data
-      # WSL2: mount NVIDIA video codec libraries not automatically passed through
-      - /usr/lib/wsl/lib:/usr/lib/wsl/lib:ro
     ports:
       - "8096:8096"
       - "7359:7359/udp"   # Local network discovery
@@ -330,13 +305,6 @@ services:
       test: ["CMD", "curl", "--fail", "http://127.0.0.1:8096/health"]
       interval: 1m
       retries: 10
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
     labels:
       - homepage.group=Media
       - homepage.name=Jellyfin
@@ -349,7 +317,6 @@ services:
       - homepage.widget.key=${JELLYFIN_API_KEY}
 
   unpackerr:
-    # Automatically extracts compressed downloads (.rar, .zip) after *arr apps finish
     image: ghcr.io/unpackerr/unpackerr:latest
     container_name: unpackerr
     restart: always
@@ -473,7 +440,7 @@ services:
       - HOMEPAGE_VAR_WEATHER_LONG=${HOMEPAGE_VAR_WEATHER_LONG}
       - HOMEPAGE_VAR_WEATHER_TIME=${TIMEZONE}
       - HOMEPAGE_VAR_WEATHER_UNIT=${HOMEPAGE_VAR_WEATHER_UNIT}
-      - HOMEPAGE_ALLOWED_HOSTS=localhost:3090
+      - HOMEPAGE_ALLOWED_HOSTS=${HOMEPAGE_ALLOWED_HOSTS:-localhost:3090}
     volumes:
       - ${CONFIG_ROOT}/homepage:/app/config
       - /var/run/docker.sock:/var/run/docker.sock:ro
