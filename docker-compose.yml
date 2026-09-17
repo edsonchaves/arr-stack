@@ -271,7 +271,7 @@ services:
       - homepage.widget.key=${JELLYSEERR_API_KEY}
 
   recyclarr:
-    image: ghcr.io/recyclarr/recyclarr:latest
+    image: ghcr.io/recyclarr/recyclarr:8
     container_name: recyclarr
     restart: unless-stopped
     user: ${USER_ID}:${GROUP_ID}
