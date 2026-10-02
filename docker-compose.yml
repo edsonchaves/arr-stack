@@ -87,31 +87,6 @@ services:
       - homepage.widget.username=${QBITTORRENT_USERNAME}
       - homepage.widget.password=${QBITTORRENT_PASSWORD}
 
-  pinchflat:
-    image: ghcr.io/kieraneglin/pinchflat:latest
-    container_name: pinchflat
-    restart: always
-    user: ${USER_ID}:${GROUP_ID}
-    environment:
-      - TZ=${TIMEZONE}
-      - LOG_LEVEL=info
-    volumes:
-      - ${CONFIG_ROOT}/pinchflat:/config
-      - ${DATA_ROOT}/media/youtube-shows:/downloads
-    ports:
-      - "8945:8945"
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8945/"]
-      interval: 1m
-      retries: 10
-    labels:
-      - homepage.group=Download
-      - homepage.name=Pinchflat
-      - homepage.icon=pinchflat.png
-      - homepage.href=http://localhost:8945
-      - homepage.description=YouTube channel subscriptions
-      - homepage.weight=4
-
   # ============================================================
   # MEDIA MANAGEMENT (*arr)
   # ============================================================
