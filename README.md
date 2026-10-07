@@ -68,6 +68,12 @@ All services run on the internal `nas` Docker network and communicate via contai
 | jellystat-db | — | PostgreSQL database backing Jellystat |
 | maintainerr | 6246 | Rule-based media cleanup (e.g. delete watched movies after 30 days) |
 
+### Home
+
+| Container | Port | Purpose |
+|---|---|---|
+| grocery-hub | 3100 | Household shopping list, pantry, receipt import and spending. Phones reach it via `tailscale serve` (HTTPS) |
+
 ### Dashboard
 
 | Container | Port | Purpose |
@@ -96,7 +102,8 @@ All services run on the internal `nas` Docker network and communicate via contai
     ├── jellystat-db/
     ├── maintainerr/
     ├── homepage/
-    └── cleanuparr/
+    ├── cleanuparr/
+    └── grocery-hub/          ← SQLite DB + receipt files
 
 /mnt/data/                    ← media storage (plan: TrueNAS Scale)
 ├── media/
@@ -242,7 +249,7 @@ sudo chown -R $USER:$USER /mnt/data
 ### Step 2 — Create config directories
 
 ```bash
-mkdir -p ~/nas-server/config/{sonarr,radarr,bazarr,jellyfin,jellyseerr,prowlarr,qbittorrent,homepage,cleanuparr,recyclarr,jellystat,jellystat-db,maintainerr}
+mkdir -p ~/nas-server/config/{sonarr,radarr,bazarr,jellyfin,jellyseerr,prowlarr,qbittorrent,homepage,cleanuparr,recyclarr,jellystat,jellystat-db,maintainerr,grocery-hub}
 ```
 
 ### Step 3 — Create and fill in `.env`
@@ -265,6 +272,8 @@ Open [`.env.template`](.env.template) as a reference. Variables to fill in:
 | `SERVER_LAN_IP` | Run: `hostname -I \| awk '{print $1}'` |
 | `JELLYSTAT_DB_PASSWORD` | Choose any strong password |
 | `JELLYSTAT_JWT_SECRET` | Choose any long random string |
+| `GROCERY_HUB_PUBLIC_URL` | `tailscale serve status` — see [Grocery Hub](docs/grocery-hub.md#2-https-for-phones-tailscale) |
+| `ANTHROPIC_API_KEY` | console.anthropic.com → API keys (optional, for photo receipts) |
 
 Leave all `*_API_KEY` fields empty for now — you will fill them after first run.
 
@@ -352,6 +361,9 @@ Connect to *arr apps, then choose your scenario: Queue Cleaner (stalled download
 ### 11. [Homepage](docs/homepage.md) — `http://localhost:3090`
 Tiles and widgets auto-populate from Docker labels once all API keys are in `.env`.
 
+### 12. [Grocery Hub](docs/grocery-hub.md) — `http://localhost:3100`
+Tailscale HTTPS, first admin, invites, widget token.
+
 ---
 
 ## Common Operations
@@ -381,9 +393,12 @@ docker compose exec qbittorrent curl ifconfig.me
 
 ## Backup
 
-All settings configured via the web UI are persisted in `config/`. Back up that directory plus `.env`:
+All settings configured via the web UI are persisted in `config/`. Back up that directory plus `.env`. Snapshot the Grocery Hub SQLite DB first ([why](docs/grocery-hub.md#6-backup)):
 
 ```bash
+docker compose exec grocery-hub node -e \
+  "require('better-sqlite3')('/data/grocery-hub.db').backup('/data/backup.db')"
+
 tar -czf ~/backups/nas-config-$(date +%Y%m%d).tar.gz \
   ~/nas-server/config \
   ~/nas-server/.env

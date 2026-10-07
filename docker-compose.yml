@@ -399,6 +399,46 @@ services:
       - homepage.weight=3
 
   # ============================================================
+  # HOME
+  # ============================================================
+
+  grocery-hub:
+    image: ghcr.io/edsonchaves/grocery-hub:latest
+    container_name: grocery-hub
+    restart: always
+    user: ${USER_ID}:${GROUP_ID}
+    environment:
+      - TZ=${TIMEZONE}
+      - PUBLIC_URL=${GROCERY_HUB_PUBLIC_URL:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_MODEL=${GROCERY_HUB_ANTHROPIC_MODEL:-}
+    volumes:
+      - ${CONFIG_ROOT}/grocery-hub:/data
+    ports:
+      - "3100:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 1m
+      retries: 10
+    labels:
+      - homepage.group=Home
+      - homepage.name=Grocery Hub
+      - homepage.icon=grocy.png
+      - homepage.href=${GROCERY_HUB_PUBLIC_URL:-http://localhost:3100}
+      - homepage.description=Shopping list, pantry, spending
+      - homepage.weight=0
+      - homepage.widget.type=customapi
+      - homepage.widget.url=http://grocery-hub:3000/api/widget
+      - homepage.widget.headers.Authorization=Bearer ${GROCERY_HUB_WIDGET_TOKEN:-}
+      - homepage.widget.mappings[0].field=list_count
+      - homepage.widget.mappings[0].label=On list
+      - homepage.widget.mappings[0].format=number
+      - homepage.widget.mappings[1].field=month_spend
+      - homepage.widget.mappings[1].label=This month
+      - homepage.widget.mappings[1].format=float
+      - homepage.widget.mappings[1].suffix=€
+
+  # ============================================================
   # DASHBOARD
   # ============================================================
 
